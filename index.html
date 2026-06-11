@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARCADE — pick your poison</title>
+<meta name="description" content="Two self-contained Three.js browser games: HOLLOW SIGNAL (first-person horror) and CORDITE (wave-based arena FPS).">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;min-height:100%;background:#070709;color:#e8e4d8;
+  font-family:'Courier New',monospace;overflow-x:hidden}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100vh;padding:40px 20px;position:relative}
+/* scanline texture */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:4;
+  background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.7) 100%)}
+header{text-align:center;margin-bottom:48px;z-index:6}
+h1{font-size:clamp(28px,5vw,52px);letter-spacing:14px;font-weight:400}
+header p{margin-top:10px;font-size:13px;letter-spacing:3px;color:#6a6a72;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,420px));gap:28px;
+  width:100%;max-width:920px;justify-content:center;z-index:6}
+.card{position:relative;display:block;text-decoration:none;color:inherit;
+  border:1px solid #2a2a32;background:#0c0c10;padding:32px 28px;min-height:340px;
+  transition:transform .25s ease,border-color .25s ease;overflow:hidden}
+.card:hover{transform:translateY(-6px)}
+.card .key{position:absolute;top:16px;right:18px;font-size:11px;color:#55555e;
+  border:1px solid #2a2a32;padding:3px 8px}
+.card h2{font-size:26px;letter-spacing:6px;font-weight:400;margin-bottom:6px}
+.card .genre{font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:22px}
+.card p{font-size:13px;line-height:1.7;color:#8a8a92}
+.card ul{list-style:none;margin-top:18px;font-size:12px;line-height:2;color:#6a6a72}
+.card ul li::before{content:'> ';color:inherit}
+.card .cta{display:inline-block;margin-top:24px;padding:10px 26px;font-size:12px;
+  letter-spacing:3px;border:1px solid;transition:all .2s ease}
+/* horror flavor */
+.card.horror{--ac:#b8542a}
+.card.horror:hover{border-color:#b8542a;box-shadow:0 0 40px rgba(184,84,42,.12)}
+.card.horror .genre,.card.horror .cta{color:#b8542a;border-color:#b8542a}
+.card.horror .cta:hover{background:#b8542a;color:#070709}
+.card.horror h2{color:#cfc8b8}
+/* shooter flavor */
+.card.shooter{--ac:#ffb340}
+.card.shooter:hover{border-color:#ffb340;box-shadow:0 0 40px rgba(255,179,64,.12)}
+.card.shooter .genre,.card.shooter .cta{color:#ffb340;border-color:#ffb340}
+.card.shooter .cta:hover{background:#ffb340;color:#070709}
+/* eyes easter egg on horror hover */
+.eyes{position:absolute;bottom:18px;right:22px;display:flex;gap:10px;opacity:0;transition:opacity .6s ease}
+.card.horror:hover .eyes{opacity:1}
+.eyes i{width:8px;height:8px;border-radius:50%;background:#ff7a1a;animation:blink 3.2s infinite}
+@keyframes blink{0%,42%,46%,100%{transform:scaleY(1)}44%{transform:scaleY(.1)}}
+footer{margin-top:48px;font-size:11px;letter-spacing:2px;color:#44444c;z-index:6;text-align:center}
+footer a{color:#6a6a72;text-decoration:none;border-bottom:1px solid #2a2a32}
+footer a:hover{color:#e8e4d8}
+@media (max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ARCADE</h1>
+  <p>two games &middot; one tab &middot; zero downloads</p>
+</header>
+
+<div class="grid">
+  <a class="card horror" href="horror.html">
+    <span class="key">[1]</span>
+    <h2>HOLLOW SIGNAL</h2>
+    <div class="genre">First-person horror</div>
+    <p>Five pages, one maze, and something that listens for light. Manage your battery, your stamina, and your sanity &mdash; then run.</p>
+    <ul>
+      <li>procedural maze, new every run</li>
+      <li>hunt cycles &mdash; hide or sprint</li>
+      <li>sanity drain, whispers, heartbeat</li>
+      <li>headphones strongly recommended</li>
+    </ul>
+    <span class="cta">DESCEND</span>
+    <span class="eyes"><i></i><i></i></span>
+  </a>
+
+  <a class="card shooter" href="shooter.html">
+    <span class="key">[2]</span>
+    <h2>CORDITE</h2>
+    <div class="genre">Wave arena FPS</div>
+    <p>Decommissioned combat frames keep waking up and you have a rifle. Hold the arena, climb the decks, headshots pay triple.</p>
+    <ul>
+      <li>escalating waves + score</li>
+      <li>platforming &mdash; frames can't climb</li>
+      <li>recoil, tracers, debris physics</li>
+      <li>supplies drop from the dead</li>
+    </ul>
+    <span class="cta">DEPLOY</span>
+  </a>
+</div>
+
+<footer>
+  single-file Three.js &middot; all audio &amp; textures procedural &middot; <a href="https://github.com/aymandakir-gh/browser-games">source on GitHub</a>
+</footer>
+
+<script>
+addEventListener('keydown',function(e){
+  if(e.key==='1')location.href='horror.html';
+  if(e.key==='2')location.href='shooter.html';
+});
+</script>
+</body>
+</html>
