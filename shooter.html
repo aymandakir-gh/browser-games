@@ -523,7 +523,7 @@ function tick(){
 
   if(state==='play'){
     /* movement */
-    var sprinting=keys.ShiftLeft;
+    var sprinting=keys.ShiftLeft||keys.ShiftRight;
     var speed=sprinting?SPRINT:WALK;
     var f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
     var r=new THREE.Vector3(-f.z,0,f.x);
@@ -655,7 +655,7 @@ function tick(){
     /* projectiles */
     for(var i=projectiles.length-1;i>=0;i--){
       var p=projectiles[i];
-      p.mesh.position.add(p.vel.clone().multiplyScalar(dt));
+      p.mesh.position.addScaledVector(p.vel,dt);
       p.life-=dt;
       var hitPlayer=p.mesh.position.distanceTo(new THREE.Vector3(pos.x,pos.y-0.3,pos.z))<0.7;
       if(hitPlayer){
@@ -691,7 +691,7 @@ function tick(){
   for(var k=particles.length-1;k>=0;k--){
     var pt=particles[k];
     pt.vel.y-=12*dt;
-    pt.mesh.position.add(pt.vel.clone().multiplyScalar(dt));
+    pt.mesh.position.addScaledVector(pt.vel,dt);
     pt.life-=dt;
     if(pt.rv){
       pt.mesh.rotation.x+=pt.rv.x*dt;

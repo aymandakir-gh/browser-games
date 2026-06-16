@@ -25,6 +25,17 @@ Wave-based arena FPS.
 
 Controls: WASD · mouse aim · hold LMB fire · R reload · SHIFT sprint · SPACE jump
 
+Sprint works with either Shift key in both games.
+
+## Roadmap
+
+Larger ideas deferred to keep each change incremental and reversible:
+
+- In-game settings menu (mouse sensitivity, master volume) shared by both games
+- Mobile / touch controls (virtual stick + look drag)
+- Object pooling for shooter particles, projectiles and tracers (currently per-spawn `new Mesh`)
+- HOLLOW SIGNAL: slow sanity recovery in safe, lit, entity-free zones to reward careful play
+
 ---
 
 Built with Claude. No build step, no dependencies beyond the Three.js CDN script.

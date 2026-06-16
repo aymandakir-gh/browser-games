@@ -103,6 +103,9 @@ var PAGES_NEEDED=5;
 var state='title'; // title|play|pause|dead|win
 var keys={}, yaw=0, pitch=0;
 var pos=new THREE.Vector3(), vel=new THREE.Vector3();
+/* reusable temp vectors — avoid per-frame allocations in the main loop */
+var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
+    tmpDir=new THREE.Vector3(), tmpEnt=new THREE.Vector3();
 var battery=100, flashOn=true, stamina=100;
 var pages=0, startTime=0;
 var maze, wallBoxes=[], pageMeshes=[], batteryMeshes=[], exitMesh=null, exitOpen=false;
@@ -645,11 +648,11 @@ function tick(){
 
   if(state==='play'){
     /* --- movement --- */
-    var sprinting=keys.ShiftLeft&&stamina>2;
+    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&stamina>2;
     var speed=sprinting?SPRINT:WALK;
-    var f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-    var r=new THREE.Vector3(-f.z,0,f.x);
-    var wish=new THREE.Vector3();
+    var f=tmpF.set(-Math.sin(yaw),0,-Math.cos(yaw));
+    var r=tmpR.set(-f.z,0,f.x);
+    var wish=tmpWish.set(0,0,0);
     if(keys.KeyW)wish.add(f);
     if(keys.KeyS)wish.sub(f);
     if(keys.KeyD)wish.add(r);
@@ -684,7 +687,7 @@ function tick(){
     var flicker=dEnt<8?(Math.random()>0.18):true;
     flashlight.intensity=fl&&flicker?1.6:0;
     flashlight.position.copy(camera.position);
-    var dir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    var dir=tmpDir.set(0,0,-1).applyQuaternion(camera.quaternion);
     flTarget.position.copy(camera.position).add(dir.multiplyScalar(10));
     glow.position.copy(camera.position);
     var bEl=$('battery');
@@ -761,7 +764,7 @@ function tick(){
     var entMoved=false;
     var direct=ent.mode==='hunt'&&seen&&dEnt<CELL*1.4;
     if(direct){
-      var dd=new THREE.Vector3(pos.x-entity.position.x,0,pos.z-entity.position.z);
+      var dd=tmpEnt.set(pos.x-entity.position.x,0,pos.z-entity.position.z);
       if(dd.lengthSq()>0.0001){
         dd.normalize().multiplyScalar(huntSpd*1.05*dt);
         entity.position.add(dd);
@@ -771,7 +774,7 @@ function tick(){
       }
     }else if(ent.path.length){
       var nc=cellCenter(ent.path[0][0],ent.path[0][1]);
-      var ed=new THREE.Vector3(nc.x-entity.position.x,0,nc.z-entity.position.z);
+      var ed=tmpEnt.set(nc.x-entity.position.x,0,nc.z-entity.position.z);
       var edist=ed.length();
       if(edist<0.3)ent.path.shift();
       else{
