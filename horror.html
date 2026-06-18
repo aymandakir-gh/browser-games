@@ -109,6 +109,7 @@ var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector
 var battery=100, flashOn=true, stamina=100;
 var pages=0, startTime=0;
 var maze, wallBoxes=[], pageMeshes=[], batteryMeshes=[], exitMesh=null, exitOpen=false;
+var pageTex=null; // shared canvas texture for all page meshes in the current build
 
 /* ================= RENDERER / SCENE ================= */
 var renderer=new THREE.WebGLRenderer({antialias:true});
@@ -148,6 +149,23 @@ var ceilTex=noiseTex('#141210','120,120,110');ceilTex.repeat.set(GRID,GRID);
 var wallMat=new THREE.MeshStandardMaterial({map:wallTex,roughness:0.95,metalness:0});
 var floorMat=new THREE.MeshStandardMaterial({map:floorTex,roughness:1,metalness:0});
 var ceilMat=new THREE.MeshStandardMaterial({map:ceilTex,roughness:1,metalness:0});
+// shared materials are reused across maze rebuilds — never dispose them
+wallMat._shared=floorMat._shared=ceilMat._shared=true;
+
+/* Free GPU resources for a transient mesh. scene.remove() alone leaks the
+   geometry/material/texture buffers, so every rebuilt maze / collectible
+   accumulates orphaned geometries and CanvasTextures across retries.
+   Per-instance geometry is always freed; shared materials are skipped. */
+function disposeMesh(m){
+  if(!m)return;
+  if(m.geometry&&!m.geometry._shared)m.geometry.dispose();
+  var mat=m.material;
+  if(mat)(Array.isArray(mat)?mat:[mat]).forEach(function(x){
+    if(x._shared)return;
+    if(x.map&&!x.map._shared)x.map.dispose();
+    x.dispose();
+  });
+}
 
 /* ================= MAZE GENERATION ================= */
 function genMaze(n){
@@ -195,8 +213,8 @@ function addWallBox(cx,cz,w,d){
   wallBoxes.push({minX:cx-w/2,maxX:cx+w/2,minZ:cz-d/2,maxZ:cz+d/2,mesh:m});
 }
 function buildMaze(){
-  // clear previous
-  wallBoxes.forEach(function(b){scene.remove(b.mesh);});
+  // clear previous (dispose per-wall geometry; wallMat is shared and kept)
+  wallBoxes.forEach(function(b){scene.remove(b.mesh);disposeMesh(b.mesh);});
   wallBoxes=[];
   maze=genMaze(GRID);
   for(var i=0;i<GRID;i++)for(var j=0;j<GRID;j++){
@@ -250,13 +268,17 @@ function scatter(count,make,arr){
   }
 }
 function buildCollectibles(){
-  pageMeshes.forEach(function(m){scene.remove(m);});
-  batteryMeshes.forEach(function(m){scene.remove(m);});
+  // dispose previous collectible geometry, materials and the old page texture
+  pageMeshes.forEach(function(m){scene.remove(m);disposeMesh(m);});
+  batteryMeshes.forEach(function(m){scene.remove(m);disposeMesh(m);});
   pageMeshes=[];batteryMeshes=[];
-  var pTex=pageTexture();
+  // free the previous build's page texture; flag the new one shared so
+  // collecting a single page never disposes the texture its siblings use
+  if(pageTex)pageTex.dispose();
+  pageTex=pageTexture();pageTex._shared=true;
   scatter(PAGES_NEEDED,function(){
     var m=new THREE.Mesh(new THREE.PlaneGeometry(0.42,0.56),
-      new THREE.MeshStandardMaterial({map:pTex,emissive:0x55503e,emissiveIntensity:0.5,side:THREE.DoubleSide}));
+      new THREE.MeshStandardMaterial({map:pageTex,emissive:0x55503e,emissiveIntensity:0.5,side:THREE.DoubleSide}));
     return m;
   },pageMeshes);
   scatter(3,function(){
@@ -264,7 +286,7 @@ function buildCollectibles(){
       new THREE.MeshStandardMaterial({color:0x1a3a1a,emissive:0x1fae3a,emissiveIntensity:0.8}));
     return m;
   },batteryMeshes);
-  if(exitMesh){scene.remove(exitMesh);exitMesh=null;}
+  if(exitMesh){scene.remove(exitMesh);disposeMesh(exitMesh);exitMesh=null;}
   exitOpen=false;
 }
 function spawnExit(){
@@ -699,7 +721,7 @@ function tick(){
       var pm=pageMeshes[i];
       pm.rotation.y=t*1.2;pm.position.y=1.1+Math.sin(t*2+i)*0.08;
       if(pm.position.distanceTo(pos)<1.1){
-        scene.remove(pm);pageMeshes.splice(i,1);
+        scene.remove(pm);disposeMesh(pm);pageMeshes.splice(i,1);
         pages++;
         $('pages').textContent='PAGES '+pages+' / '+PAGES_NEEDED;
         blip(660,0.15,'sine',0.2);blip(990,0.25,'sine',0.15);
@@ -713,7 +735,7 @@ function tick(){
       var bm=batteryMeshes[j];
       bm.rotation.y=t*2;
       if(bm.position.distanceTo(pos)<1.1){
-        scene.remove(bm);batteryMeshes.splice(j,1);
+        scene.remove(bm);disposeMesh(bm);batteryMeshes.splice(j,1);
         battery=100;
         blip(440,0.1,'square',0.15);blip(587,0.2,'square',0.12);
         hint('BATTERY RESTORED');
