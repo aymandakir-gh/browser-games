@@ -361,12 +361,17 @@ function hasLOS(a,b){
   return true;
 }
 function placeEntityFar(){
+  var pCell=worldToCell(pos);           // true player spawn cell, not assumed (0,0)
+  var exit=[GRID-1,GRID-1];             // win door is at cellCenter(GRID-1,GRID-1)
   var best=null,bd=-1;
   for(var t=0;t<30;t++){
     var cx=Math.floor(Math.random()*GRID),cy=Math.floor(Math.random()*GRID);
-    var d=Math.abs(cx)+Math.abs(cy);
+    // never start on/next to the exit tile, or the entity camps the win door
+    if(Math.abs(cx-exit[0])+Math.abs(cy-exit[1])<=2)continue;
+    var d=Math.abs(cx-pCell[0])+Math.abs(cy-pCell[1]); // distance from the real player
     if(d>bd){bd=d;best=[cx,cy];}
   }
+  if(!best)best=[0,0]; // fallback if every sample landed near the exit corner
   ent.cell=best;ent.mode='roam';ent.path=[];
   var c=cellCenter(best[0],best[1]);
   entity.position.set(c.x,0,c.z);
