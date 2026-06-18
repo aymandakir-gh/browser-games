@@ -204,9 +204,23 @@ camera.add(gun);
 gun.position.set(0.28,-0.25,-0.55);
 scene.add(camera);
 
+/* Free GPU resources for a transient mesh. scene.remove() alone leaks the
+   geometry/material/texture buffers. Shared geometries are flagged ._shared
+   so they are never disposed while other live meshes still reference them. */
+function disposeMesh(m){
+  if(!m)return;
+  if(m.geometry&&!m.geometry._shared)m.geometry.dispose();
+  var mat=m.material;
+  if(mat)(Array.isArray(mat)?mat:[mat]).forEach(function(x){if(x.map)x.map.dispose();x.dispose();});
+}
+function disposeGroup(g){
+  if(!g)return;
+  g.traverse(function(o){if(o.isMesh)disposeMesh(o);});
+}
+
 /* ================= ENEMIES ================= */
-var enemyBodyGeo=new THREE.CylinderGeometry(0.42,0.5,1.5,8);
-var enemyHeadGeo=new THREE.SphereGeometry(0.3,10,8);
+var enemyBodyGeo=new THREE.CylinderGeometry(0.42,0.5,1.5,8);enemyBodyGeo._shared=true;
+var enemyHeadGeo=new THREE.SphereGeometry(0.3,10,8);enemyHeadGeo._shared=true;
 function spawnEnemy(level){
   var mat=new THREE.MeshStandardMaterial({color:0x3a2020,roughness:0.7,metalness:0.3,emissive:0x000000});
   var g=new THREE.Group();
@@ -316,11 +330,11 @@ function updateHud(){
 
 /* ================= GAME FLOW ================= */
 function reset(){
-  enemies.forEach(function(e){scene.remove(e.group);});
-  projectiles.forEach(function(p){scene.remove(p.mesh);});
-  pickups.forEach(function(p){scene.remove(p.mesh);});
-  particles.forEach(function(p){scene.remove(p.mesh);});
-  tracers.forEach(function(t){scene.remove(t.mesh);});
+  enemies.forEach(function(e){scene.remove(e.group);disposeGroup(e.group);});
+  projectiles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
+  pickups.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
+  particles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
+  tracers.forEach(function(t){scene.remove(t.mesh);disposeMesh(t.mesh);});
   enemies=[];projectiles=[];pickups=[];particles=[];tracers=[];
   hp=100;ammo=MAG;reserve=120;reloading=false;
   wave=0;score=0;kills=0;inWave=false;betweenT=1.5;
@@ -407,6 +421,7 @@ function fire(){
 function killEnemy(e,headshot){
   e.alive=false;
   scene.remove(e.group);
+  disposeGroup(e.group);
   enemies.splice(enemies.indexOf(e),1);
   kills++;
   score+=headshot?150:100;
@@ -444,7 +459,7 @@ function hitmark(big){
 }
 
 /* ================= EFFECTS ================= */
-var sparkGeo=new THREE.BoxGeometry(0.06,0.06,0.06);
+var sparkGeo=new THREE.BoxGeometry(0.06,0.06,0.06);sparkGeo._shared=true;
 function sparks(p,n,color){
   for(var i=0;i<n;i++){
     var m=new THREE.Mesh(sparkGeo,new THREE.MeshBasicMaterial({color:color}));
@@ -664,10 +679,10 @@ function tick(){
         hp-=12;sfxHurt();shake=Math.min(shake+0.3,0.5);
         $('dmg-vig').style.opacity=0.9;
         updateHud();
-        if(hp<=0){scene.remove(p.mesh);projectiles.splice(i,1);die();continue;}
+        if(hp<=0){scene.remove(p.mesh);disposeMesh(p.mesh);projectiles.splice(i,1);die();continue;}
       }
       if(hitPlayer||p.life<=0||pointBlocked(p.mesh.position)||p.mesh.position.y<0){
-        scene.remove(p.mesh);projectiles.splice(i,1);
+        scene.remove(p.mesh);disposeMesh(p.mesh);projectiles.splice(i,1);
       }
     }
     var dv=$('dmg-vig');
@@ -683,9 +698,9 @@ function tick(){
         if(pk.type==='hp')hp=Math.min(100,hp+30);
         else reserve=Math.min(240,reserve+45);
         sfxPickup();
-        scene.remove(pk.mesh);pickups.splice(j,1);
+        scene.remove(pk.mesh);disposeMesh(pk.mesh);pickups.splice(j,1);
         updateHud();
-      }else if(pk.life<=0){scene.remove(pk.mesh);pickups.splice(j,1);}
+      }else if(pk.life<=0){scene.remove(pk.mesh);disposeMesh(pk.mesh);pickups.splice(j,1);}
     }
   }
 
@@ -703,13 +718,13 @@ function tick(){
       if(pt.mesh.position.y<0.1&&pt.vel.y<0){pt.vel.y*=-0.4;pt.vel.x*=0.7;pt.vel.z*=0.7;}
     }
     pt.mesh.scale.setScalar(Math.max(0.001,Math.min(1,pt.life)));
-    if(pt.life<=0){scene.remove(pt.mesh);particles.splice(k,1);}
+    if(pt.life<=0){scene.remove(pt.mesh);disposeMesh(pt.mesh);particles.splice(k,1);}
   }
   for(var k2=tracers.length-1;k2>=0;k2--){
     var tr=tracers[k2];
     tr.life-=dt;
     tr.mesh.material.opacity=tr.life*10;
-    if(tr.life<=0){scene.remove(tr.mesh);tracers.splice(k2,1);}
+    if(tr.life<=0){scene.remove(tr.mesh);disposeMesh(tr.mesh);tracers.splice(k2,1);}
   }
 
   renderer.render(scene,camera);
