@@ -138,11 +138,13 @@ var wallMat=new THREE.MeshStandardMaterial({color:0x171a22,roughness:0.9});
 var crateMat=new THREE.MeshStandardMaterial({color:0x232733,roughness:0.8,metalness:0.2});
 var trimMat=new THREE.MeshBasicMaterial({color:0xffb340});
 var obstacles=[]; // AABBs {minX,maxX,minZ,maxZ,h}
+var wallMeshes=[]; // solid level boxes only — used for bullet occlusion (excludes trim/pickups/particles/tracers)
 
 function addBox(x,z,w,d,h,mat){
   var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||crateMat);
   m.position.set(x,h/2,z);scene.add(m);
   obstacles.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2,h:h});
+  wallMeshes.push(m);
   // glowing trim line
   var trim=new THREE.Mesh(new THREE.BoxGeometry(w+0.04,0.06,d+0.04),trimMat);
   trim.position.set(x,h-0.2,z);scene.add(trim);
@@ -377,7 +379,7 @@ function fire(){
   var targets=[];
   enemies.forEach(function(e){if(e.alive){targets.push(e.body);targets.push(e.head);}});
   var hitsE=raycaster.intersectObjects(targets,false);
-  var hitsW=raycaster.intersectObjects(scene.children.filter(function(o){return o.isMesh&&!o.userData.enemy&&o!==floor;}),false);
+  var hitsW=raycaster.intersectObjects(wallMeshes,false);
   var range=120,hitPoint=null;
   var wallD=hitsW.length?hitsW[0].distance:Infinity;
   if(hitsE.length&&hitsE[0].distance<wallD){
