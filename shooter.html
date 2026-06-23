@@ -42,6 +42,10 @@ canvas{display:block}
   transform:translate(-50%,-50%) rotate(45deg);opacity:0;pointer-events:none}
 #dmg-vig{position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0;
   background:radial-gradient(ellipse at center,transparent 35%,rgba(160,10,10,.6) 100%);transition:opacity .25s}
+#low-vig{position:fixed;inset:0;z-index:6;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at center,transparent 48%,rgba(190,12,12,.55) 100%)}
+#low-vig.on{animation:lowpulse 1s ease-in-out infinite}
+@keyframes lowpulse{0%,100%{opacity:.12}50%{opacity:.68}}
 #vig{position:fixed;inset:0;z-index:5;pointer-events:none;
   background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.55) 100%)}
 </style>
@@ -50,6 +54,7 @@ canvas{display:block}
 
 <div id="vig"></div>
 <div id="dmg-vig"></div>
+<div id="low-vig"></div>
 <div id="ch"><span class="ch-l t"></span><span class="ch-l b"></span><span class="ch-l l"></span><span class="ch-l r"></span></div>
 <div id="hitmark">+</div>
 
@@ -101,7 +106,7 @@ var pos=new THREE.Vector3(0,EYE,0), vel=new THREE.Vector3(), vy=0, grounded=true
 var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
 var wave=0, score=0, kills=0, betweenT=0, inWave=false;
 var enemies=[], projectiles=[], pickups=[], particles=[], tracers=[];
-var shake=0, recoil=0;
+var shake=0, recoil=0, lowHpT=0;
 
 /* ================= RENDERER ================= */
 var renderer=new THREE.WebGLRenderer({antialias:true});
@@ -309,6 +314,7 @@ addEventListener('mousemove',function(e){
 document.addEventListener('pointerlockchange',function(){
   if(document.pointerLockElement!==renderer.domElement&&state==='play'){
     state='pause';show('pause');mouseDown=false;
+    $('low-vig').classList.remove('on');
   }
 });
 
@@ -364,6 +370,7 @@ function die(){
   document.exitPointerLock();
   $('death-stats').textContent='Waves cleared: '+(wave-1)+' — kills: '+kills+' — score: '+score;
   show('death');$('hud').classList.remove('on');
+  $('low-vig').classList.remove('on');
 }
 
 /* ================= SHOOTING ================= */
@@ -687,6 +694,14 @@ function tick(){
     }
     var dv=$('dmg-vig');
     dv.style.opacity=Math.max(0,parseFloat(dv.style.opacity||0)-dt*1.6);
+
+    /* low-integrity warning: pulsing vignette (CSS) + slow thump while critical */
+    var crit=hp>0&&hp<35;
+    $('low-vig').classList.toggle('on',crit);
+    if(crit){
+      lowHpT-=dt;
+      if(lowHpT<=0){lowHpT=0.85;tone(150,0.16,'sine',0.16,72);}
+    }else lowHpT=0;
 
     /* pickups */
     for(var j=pickups.length-1;j>=0;j--){

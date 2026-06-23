@@ -831,9 +831,18 @@ function tick(){
     if(breathGain)breathGain.gain.value=Math.max(0,(1-dEnt/9))*0.5*(0.6+0.4*Math.sin(t*2.2));
 
     /* --- sanity --- */
-    var drain=(fl?0.35:1.0)+(dEnt<10?1.6:0)+(ent.mode==='hunt'?1.0:0);
-    sanity=Math.max(0,sanity-drain*dt);
-    $('sanity').style.width=sanity+'%';
+    /* safe zone (lit + entity far + no hunt) slowly restores sanity — rewards careful play.
+       recovery is slower than darkness drain and costs battery, so it isn't a free reset. */
+    var safeZone=fl&&dEnt>15&&ent.mode!=='hunt';
+    if(safeZone){
+      sanity=Math.min(100,sanity+2.2*dt);
+    }else{
+      var drain=(fl?0.35:1.0)+(dEnt<10?1.6:0)+(ent.mode==='hunt'?1.0:0);
+      sanity=Math.max(0,sanity-drain*dt);
+    }
+    var sanEl=$('sanity');
+    sanEl.style.width=sanity+'%';
+    sanEl.style.background=safeZone?'#5a8a6a':'#7a5a9a';
 
     /* --- fear feedback --- */
     var fear=Math.max(0,1-dEnt/12);
