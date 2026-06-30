@@ -400,7 +400,7 @@ function placeEntityFar(){
 }
 
 /* ================= AUDIO (procedural) ================= */
-var AC=null,droneGain=null,master=null,breathGain=null;
+var AC=null,droneGain=null,master=null,breathGain=null,breathPan=null;
 function audioInit(){
   if(AC)return;
   AC=new (window.AudioContext||window.webkitAudioContext)();
@@ -420,7 +420,18 @@ function audioInit(){
   for(var bi=0;bi<bd.length;bi++)bd[bi]=(Math.random()*2-1)*0.5;
   var bsrc=AC.createBufferSource();bsrc.buffer=bbuf;bsrc.loop=true;
   var bbp=AC.createBiquadFilter();bbp.type='bandpass';bbp.frequency.value=480;bbp.Q.value=1.4;
-  bsrc.connect(bbp);bbp.connect(breathGain);breathGain.connect(master);bsrc.start();
+  bsrc.connect(bbp);bbp.connect(breathGain);
+  // stereo-pan the breathing toward the entity's bearing (breathing radar)
+  if(AC.createStereoPanner){breathPan=AC.createStereoPanner();breathGain.connect(breathPan);breathPan.connect(master);}
+  else breathGain.connect(master);
+  bsrc.start();
+}
+/* route a one-shot's output to master, optionally stereo-panned (pan in [-1,1]) */
+function panTo(node,pan){
+  if(pan&&AC.createStereoPanner){
+    var p=AC.createStereoPanner();p.pan.value=Math.max(-1,Math.min(1,pan));
+    node.connect(p);p.connect(master);
+  }else node.connect(master);
 }
 function blip(freq,dur,type,vol){
   if(!AC)return;
@@ -460,7 +471,7 @@ function screech(){
     o.connect(og);og.connect(master);o.start();o.stop(AC.currentTime+dur);
   });
 }
-function growl(vol){
+function growl(vol,pan){
   if(!AC)return;
   var dur=0.7+Math.random()*0.5;
   var o=AC.createOscillator(),g=AC.createGain(),lp=AC.createBiquadFilter();
@@ -470,7 +481,7 @@ function growl(vol){
   lp.type='lowpass';lp.frequency.value=320;
   g.gain.setValueAtTime(vol,AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
-  o.connect(lp);lp.connect(g);g.connect(master);
+  o.connect(lp);lp.connect(g);panTo(g,pan);
   o.start();o.stop(AC.currentTime+dur);
   var lfo=AC.createOscillator(),lg=AC.createGain();
   lfo.frequency.value=9;lg.gain.value=14;
@@ -489,7 +500,7 @@ function scream(){
     o.connect(g);g.connect(master);o.start();o.stop(AC.currentTime+0.75);
   });
 }
-function thud(vol){
+function thud(vol,pan){
   if(!AC)return;
   var o=AC.createOscillator(),g=AC.createGain();
   o.type='sine';
@@ -497,7 +508,7 @@ function thud(vol){
   o.frequency.exponentialRampToValueAtTime(28,AC.currentTime+0.15);
   g.gain.setValueAtTime(vol,AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+0.2);
-  o.connect(g);g.connect(master);o.start();o.stop(AC.currentTime+0.22);
+  o.connect(g);panTo(g,pan);o.start();o.stop(AC.currentTime+0.22);
 }
 function whisper(){
   if(!AC)return;
@@ -556,6 +567,7 @@ function killBoom(){
 }
 var stepT=0,hbT=0,entStepT=0,growlT=3;
 var sanity=100,whisperT=8,stingerT=22;
+var entPan=0; // stereo bearing of the entity relative to facing, updated each frame
 
 /* ================= INPUT ================= */
 addEventListener('keydown',function(e){
@@ -711,6 +723,9 @@ function tick(){
     if(flashOn&&battery>0){battery=Math.max(0,battery-1.7*dt);}
     var fl=flashOn&&battery>0;
     var dEnt=entity.position.distanceTo(pos);
+    /* bearing of the entity vs where you're facing → stereo pan for its sounds */
+    var ePx=entity.position.x-pos.x,ePz=entity.position.z-pos.z,ePd=Math.hypot(ePx,ePz)||1;
+    entPan=Math.max(-1,Math.min(1,(ePx/ePd)*Math.cos(yaw)+(ePz/ePd)*(-Math.sin(yaw))));
     var flicker=dEnt<8?(Math.random()>0.18):true;
     flashlight.intensity=fl&&flicker?1.6:0;
     flashlight.position.copy(camera.position);
@@ -819,16 +834,17 @@ function tick(){
       if(entStepT<=0){
         entStepT=0.55;
         var sv=Math.max(0,0.4*(1-dEnt/22));
-        if(sv>0.015)thud(sv);
+        if(sv>0.015)thud(sv,entPan);
       }
     }
     growlT-=dt;
     if(growlT<=0){
       growlT=ent.mode==='hunt'?1.1+Math.random():3.5+Math.random()*3;
       var gv=Math.max(0,0.5*(1-dEnt/18));
-      if(gv>0.02)growl(gv);
+      if(gv>0.02)growl(gv,entPan);
     }
     if(breathGain)breathGain.gain.value=Math.max(0,(1-dEnt/9))*0.5*(0.6+0.4*Math.sin(t*2.2));
+    if(breathPan)breathPan.pan.value=entPan;
 
     /* --- sanity --- */
     /* safe zone (lit + entity far + no hunt) slowly restores sanity — rewards careful play.
@@ -864,6 +880,7 @@ function tick(){
     if(ent.mode==='hunt'&&fl)flashlight.intensity=Math.random()>0.3?1.6:0.4;
     if(dEnt<1.55)die();
   }
+  else if(breathGain)breathGain.gain.value=0; // don't leave the breathing stuck on while paused/dead
 
   renderer.render(scene,camera);
 }

@@ -107,6 +107,7 @@ var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
 var wave=0, score=0, kills=0, betweenT=0, inWave=false;
 var enemies=[], projectiles=[], pickups=[], particles=[], tracers=[];
 var shake=0, recoil=0, lowHpT=0;
+var nextWaveSec=-1; // last whole-second shown in the between-wave countdown
 
 /* ================= RENDERER ================= */
 var renderer=new THREE.WebGLRenderer({antialias:true});
@@ -343,7 +344,7 @@ function reset(){
   tracers.forEach(function(t){scene.remove(t.mesh);disposeMesh(t.mesh);});
   enemies=[];projectiles=[];pickups=[];particles=[];tracers=[];
   hp=100;ammo=MAG;reserve=120;reloading=false;
-  wave=0;score=0;kills=0;inWave=false;betweenT=1.5;
+  wave=0;score=0;kills=0;inWave=false;betweenT=1.5;nextWaveSec=-1;
   pos.set(0,EYE,0);vel.set(0,0,0);vy=0;yaw=0;pitch=0;
   updateHud();
 }
@@ -358,7 +359,7 @@ $('resume').addEventListener('click',begin);
 $('retry').addEventListener('click',function(){reset();begin();});
 
 function startWave(){
-  wave++;inWave=true;
+  wave++;inWave=true;nextWaveSec=-1;
   var n=3+wave*2;
   for(var i=0;i<n;i++)spawnEnemy(wave);
   banner('WAVE '+wave);
@@ -614,6 +615,9 @@ function tick(){
     /* waves */
     if(!inWave){
       betweenT-=dt;
+      // live countdown to the next wave (update the HUD only when the second changes)
+      var sec=Math.max(0,Math.ceil(betweenT));
+      if(sec!==nextWaveSec){nextWaveSec=sec;$('wave-info').textContent='WAVE '+(wave+1)+' IN '+sec;}
       if(betweenT<=0)startWave();
     }
 
@@ -666,6 +670,7 @@ function tick(){
         pm.position.copy(origin);
         scene.add(pm);
         projectiles.push({mesh:pm,vel:aim.multiplyScalar(16),life:3});
+        sparks(origin,5,0xffa030); // muzzle flash so you can read where shots come from
         sfxEnemyShot();
       }
       // melee
