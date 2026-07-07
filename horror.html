@@ -106,7 +106,7 @@ var pos=new THREE.Vector3(), vel=new THREE.Vector3();
 /* reusable temp vectors — avoid per-frame allocations in the main loop */
 var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
     tmpDir=new THREE.Vector3(), tmpEnt=new THREE.Vector3();
-var battery=100, flashOn=true, stamina=100;
+var battery=100, flashOn=true, stamina=100, exhausted=false;
 var pages=0, startTime=0;
 var maze, wallBoxes=[], pageMeshes=[], batteryMeshes=[], exitMesh=null, exitOpen=false;
 var pageTex=null; // shared canvas texture for all page meshes in the current build
@@ -452,6 +452,18 @@ function heartbeat(){
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+0.18);
   o.connect(g);g.connect(master);o.start();o.stop(AC.currentTime+0.2);
 }
+function gasp(){
+  // breathless exhale when stamina bottoms out (exhaustion cue)
+  if(!AC)return;
+  var dur=0.5;
+  var buf=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);
+  var d=buf.getChannelData(0);
+  for(var i=0;i<d.length;i++){var env=Math.sin((i/d.length)*Math.PI);d[i]=(Math.random()*2-1)*env;}
+  var src=AC.createBufferSource();src.buffer=buf;
+  var bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=650;bp.Q.value=0.9;
+  var g=AC.createGain();g.gain.value=0.22;
+  src.connect(bp);bp.connect(g);g.connect(master);src.start();
+}
 function screech(){
   if(!AC)return;
   var dur=1.1;
@@ -600,7 +612,7 @@ function hint(msg){
 /* ================= GAME FLOW ================= */
 function reset(){
   buildMaze();buildCollectibles();
-  pages=0;battery=100;flashOn=true;stamina=100;
+  pages=0;battery=100;flashOn=true;stamina=100;exhausted=false;
   $('pages').textContent='PAGES 0 / '+PAGES_NEEDED;
   pos.set(cellCenter(0,0).x,EYE,cellCenter(0,0).z);
   yaw=Math.PI/4;pitch=0;vel.set(0,0,0);
@@ -687,7 +699,9 @@ function tick(){
 
   if(state==='play'){
     /* --- movement --- */
-    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&stamina>2;
+    /* sprint is gated by an exhaustion state: burn stamina to empty and you
+       must recover past a threshold before you can run again (no tap-spam) */
+    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&!exhausted&&stamina>2;
     var speed=sprinting?SPRINT:WALK;
     var f=tmpF.set(-Math.sin(yaw),0,-Math.cos(yaw));
     var r=tmpR.set(-f.z,0,f.x);
@@ -704,7 +718,11 @@ function tick(){
     collide(pos);
     if(moving&&sprinting)stamina=Math.max(0,stamina-22*dt);
     else stamina=Math.min(100,stamina+14*dt);
-    $('stamina').style.width=stamina+'%';
+    if(stamina<=0&&!exhausted){exhausted=true;gasp();hint('OUT OF BREATH — YOU CAN\'T RUN');}
+    if(exhausted&&stamina>35)exhausted=false; // hysteresis: must recover before sprinting again
+    var stEl=$('stamina');
+    stEl.style.width=stamina+'%';
+    stEl.style.background=exhausted?'#a31616':'#4a463d';
     // head bob + footsteps
     var speedNow=Math.sqrt(vel.x*vel.x+vel.z*vel.z);
     var bob=Math.sin(t*(sprinting?13:9))*0.035*Math.min(1,speedNow/WALK);

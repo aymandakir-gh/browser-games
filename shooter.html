@@ -71,7 +71,7 @@ canvas{display:block}
 <div class="screen" id="title">
   <h1>CORDITE</h1>
   <p>Decommissioned combat frames have re-activated in the test arena. Hold out as long as you can.<br><br>
-  WASD move &middot; mouse aim &middot; hold LMB fire &middot; R reload &middot; SHIFT sprint &middot; SPACE jump<br>
+  WASD move &middot; mouse aim &middot; hold LMB fire &middot; RMB aim down sights &middot; R reload &middot; SHIFT sprint &middot; SPACE jump<br>
   Headshots deal triple. Dead frames drop supplies.<br>
   Climb the crates, stairs and sniper decks &mdash; the frames can&rsquo;t.</p>
   <button class="btn" id="start">ENTER ARENA</button>
@@ -101,7 +101,7 @@ var MAG=30, FIRE_RATE=0.105, DMG=34, HEAD_MULT=3, RELOAD_T=1.4;
 
 /* ================= STATE ================= */
 var state='title';
-var keys={}, mouseDown=false, yaw=0, pitch=0;
+var keys={}, mouseDown=false, aiming=false, yaw=0, pitch=0;
 var pos=new THREE.Vector3(0,EYE,0), vel=new THREE.Vector3(), vy=0, grounded=true;
 var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
 var wave=0, score=0, kills=0, betweenT=0, inWave=false;
@@ -304,17 +304,25 @@ addEventListener('keydown',function(e){
   if(e.code==='Space')e.preventDefault();
 });
 addEventListener('keyup',function(e){keys[e.code]=false;});
-addEventListener('mousedown',function(){if(state==='play')mouseDown=true;});
-addEventListener('mouseup',function(){mouseDown=false;});
+addEventListener('mousedown',function(e){
+  if(state!=='play')return;
+  if(e.button===2)aiming=true;   // RMB: aim down sights
+  else mouseDown=true;           // LMB / other: fire
+});
+addEventListener('mouseup',function(e){
+  if(e.button===2)aiming=false;else mouseDown=false;
+});
+addEventListener('contextmenu',function(e){e.preventDefault();}); // suppress browser menu on RMB
 addEventListener('mousemove',function(e){
   if(document.pointerLockElement!==renderer.domElement)return;
-  yaw-=e.movementX*0.0021;
-  pitch-=e.movementY*0.0021;
+  var s=aiming?0.0013:0.0021; // steadier look while sighted
+  yaw-=e.movementX*s;
+  pitch-=e.movementY*s;
   pitch=Math.max(-1.5,Math.min(1.5,pitch));
 });
 document.addEventListener('pointerlockchange',function(){
   if(document.pointerLockElement!==renderer.domElement&&state==='play'){
-    state='pause';show('pause');mouseDown=false;
+    state='pause';show('pause');mouseDown=false;aiming=false;
     $('low-vig').classList.remove('on');
   }
 });
@@ -346,6 +354,7 @@ function reset(){
   hp=100;ammo=MAG;reserve=120;reloading=false;
   wave=0;score=0;kills=0;inWave=false;betweenT=1.5;nextWaveSec=-1;
   pos.set(0,EYE,0);vel.set(0,0,0);vy=0;yaw=0;pitch=0;
+  aiming=false;camera.fov=75;camera.updateProjectionMatrix(); // clear any ADS zoom from a prior run
   updateHud();
 }
 function begin(){
@@ -367,7 +376,7 @@ function startWave(){
   updateHud();
 }
 function die(){
-  state='dead';mouseDown=false;
+  state='dead';mouseDown=false;aiming=false;
   document.exitPointerLock();
   $('death-stats').textContent='Waves cleared: '+(wave-1)+' — kills: '+kills+' — score: '+score;
   show('death');$('hud').classList.remove('on');
@@ -393,7 +402,7 @@ function fire(){
   muzzleFlash.rotation.z=Math.random()*Math.PI;
   muzzleFlash.scale.setScalar(0.8+Math.random()*0.5);
   // spread grows with sustained fire
-  var spread=0.004+recoil*0.25;
+  var spread=(0.004+recoil*0.25)*(aiming?0.35:1); // tighter cone when aiming down sights
   var dir=new THREE.Vector3((Math.random()-0.5)*spread*2,(Math.random()-0.5)*spread*2,-1)
     .applyQuaternion(camera.quaternion).normalize();
   raycaster.set(camera.position,dir);
@@ -548,8 +557,8 @@ function tick(){
 
   if(state==='play'){
     /* movement */
-    var sprinting=keys.ShiftLeft||keys.ShiftRight;
-    var speed=sprinting?SPRINT:WALK;
+    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&!aiming; // aiming overrides sprint
+    var speed=aiming?WALK*0.55:(sprinting?SPRINT:WALK);       // ADS slows you for control
     var f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
     var r=new THREE.Vector3(-f.z,0,f.x);
     var wish=new THREE.Vector3();
@@ -581,18 +590,23 @@ function tick(){
     camera.rotation.set(0,0,0);
     camera.rotateY(yaw);camera.rotateX(pitch+recoil);
     // sprint FOV kick
-    var tFov=(sprinting&&speedNow>1)?82:75;
+    var tFov=aiming?55:((sprinting&&speedNow>1)?82:75); // zoom in while aiming
     camera.fov+=(tFov-camera.fov)*Math.min(1,dt*8);
     camera.updateProjectionMatrix();
     // gun sway
-    gun.position.x=0.28+Math.sin(t*5)*0.004;
-    gun.position.y=-0.25+bob*0.5-recoil*0.6;
-    gun.position.z=-0.55+recoil*0.8;
+    // ease the viewmodel toward a centered "sighting" pose while aiming
+    var adsK=Math.min(1,dt*12);
+    var gtx=(aiming?0.06:0.28)+Math.sin(t*5)*0.004;
+    var gty=(aiming?-0.14:-0.25)+bob*0.5-recoil*0.6;
+    var gtz=(aiming?-0.42:-0.55)+recoil*0.8;
+    gun.position.x+=(gtx-gun.position.x)*adsK;
+    gun.position.y+=(gty-gun.position.y)*adsK;
+    gun.position.z+=(gtz-gun.position.z)*adsK;
     muzzleLight.intensity=Math.max(0,muzzleLight.intensity-dt*30);
     if(muzzleFlash)muzzleFlash.material.opacity=Math.max(0,muzzleFlash.material.opacity-dt*14);
 
     /* crosshair spread */
-    var sp=6+recoil*220;
+    var sp=(aiming?2:6)+recoil*220;
     document.querySelector('#ch .t').style.top=(-sp-8)+'px';
     document.querySelector('#ch .b').style.top=sp+'px';
     document.querySelector('#ch .l').style.left=(-sp-8)+'px';
