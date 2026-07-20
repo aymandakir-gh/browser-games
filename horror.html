@@ -898,7 +898,12 @@ function tick(){
     if(ent.mode==='hunt'&&fl)flashlight.intensity=Math.random()>0.3?1.6:0.4;
     if(dEnt<1.55)die();
   }
-  else if(breathGain)breathGain.gain.value=0; // don't leave the breathing stuck on while paused/dead
+  else{
+    // don't leave ambient horror audio stuck at an elevated fear-driven volume
+    // while paused/dead/won — reset to the resting levels set in audioInit()
+    if(breathGain)breathGain.gain.value=0;
+    if(droneGain)droneGain.gain.value=0.05;
+  }
 
   renderer.render(scene,camera);
 }
