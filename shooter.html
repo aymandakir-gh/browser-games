@@ -106,7 +106,7 @@ var pos=new THREE.Vector3(0,EYE,0), vel=new THREE.Vector3(), vy=0, grounded=true
 var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
 var wave=0, score=0, kills=0, betweenT=0, inWave=false;
 var enemies=[], projectiles=[], pickups=[], particles=[], tracers=[];
-var shake=0, recoil=0, lowHpT=0;
+var shake=0, recoil=0, lowHpT=0, meleeSfxT=0;
 var nextWaveSec=-1; // last whole-second shown in the between-wave countdown
 /* reusable temp vectors — avoid per-frame allocations in movement + enemy AI */
 var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
@@ -639,6 +639,7 @@ function tick(){
     }
 
     /* enemies */
+    meleeSfxT-=dt; // one cooldown for the whole frame, not one per enemy
     enemies.forEach(function(e){
       var g=e.group;
       var toP=tmpToP.set(pos.x-g.position.x,0,pos.z-g.position.z);
@@ -690,11 +691,19 @@ function tick(){
         sparks(origin,5,0xffa030); // muzzle flash so you can read where shots come from
         sfxEnemyShot();
       }
-      // melee
-      if(dist<1.4){
+      // melee — contact damage
+      // the state guard stops every remaining enemy in this frame's forEach from
+      // re-entering die() once one of them has already killed you
+      if(dist<1.4&&state==='play'){
         hp-=20*dt;
         $('dmg-vig').style.opacity=0.8;
-        if(hp<=0)die();
+        updateHud(); // the integrity bar used to freeze here: melee never refreshed the HUD
+        if(meleeSfxT<=0){ // throttled cue so contact damage is audible, not silent
+          meleeSfxT=0.32;
+          sfxHurt();
+          shake=Math.min(shake+0.16,0.45);
+        }
+        if(hp<=0){hp=0;updateHud();die();}
       }
     });
 
@@ -703,7 +712,10 @@ function tick(){
       var p=projectiles[i];
       p.mesh.position.addScaledVector(p.vel,dt);
       p.life-=dt;
-      var hitPlayer=p.mesh.position.distanceTo(new THREE.Vector3(pos.x,pos.y-0.3,pos.z))<0.7;
+      /* inline the torso-point distance — this previously allocated a throwaway
+         Vector3 per projectile per frame (dozens a second in late waves) */
+      var hx=p.mesh.position.x-pos.x,hy=p.mesh.position.y-(pos.y-0.3),hz=p.mesh.position.z-pos.z;
+      var hitPlayer=(hx*hx+hy*hy+hz*hz)<0.49; // 0.7² — squared compare, no sqrt
       if(hitPlayer){
         hp-=12;sfxHurt();shake=Math.min(shake+0.3,0.5);
         $('dmg-vig').style.opacity=0.9;

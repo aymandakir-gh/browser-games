@@ -580,6 +580,8 @@ function killBoom(){
 var stepT=0,hbT=0,entStepT=0,growlT=3;
 var sanity=100,whisperT=8,stingerT=22;
 var entPan=0; // stereo bearing of the entity relative to facing, updated each frame
+/* flashlight flicker is re-rolled on a fixed clock, not per frame — see tick() */
+var flickerT=0,flickerOn=true,huntFlickerOn=true;
 
 /* ================= INPUT ================= */
 addEventListener('keydown',function(e){
@@ -740,12 +742,25 @@ function tick(){
     /* --- flashlight --- */
     if(flashOn&&battery>0){battery=Math.max(0,battery-1.7*dt);}
     var fl=flashOn&&battery>0;
-    var dEnt=entity.position.distanceTo(pos);
+    /* horizontal (floor-plane) distance to the entity.
+       pos.y sits at EYE (1.65) while the entity stands at y≈0, so the old
+       3D distanceTo() could never return less than 1.65 — which made the
+       `dEnt<1.55` kill test below mathematically unreachable and the game
+       unloseable. Every proximity rule here is a floor-plane rule. */
+    var ePx=entity.position.x-pos.x,ePz=entity.position.z-pos.z;
+    var dEnt=Math.hypot(ePx,ePz),ePd=dEnt||1;
     /* bearing of the entity vs where you're facing → stereo pan for its sounds */
-    var ePx=entity.position.x-pos.x,ePz=entity.position.z-pos.z,ePd=Math.hypot(ePx,ePz)||1;
     entPan=Math.max(-1,Math.min(1,(ePx/ePd)*Math.cos(yaw)+(ePz/ePd)*(-Math.sin(yaw))));
-    var flicker=dEnt<8?(Math.random()>0.18):true;
-    flashlight.intensity=fl&&flicker?1.6:0;
+    /* re-roll the flicker on a fixed ~14Hz clock instead of once per frame, so
+       the strobe reads identically at 60Hz and 144Hz instead of machine-gunning
+       on high-refresh displays */
+    flickerT-=dt;
+    if(flickerT<=0){
+      flickerT=1/14;
+      flickerOn=dEnt<8?(Math.random()>0.18):true;
+      huntFlickerOn=Math.random()>0.3;
+    }
+    flashlight.intensity=fl&&flickerOn?1.6:0;
     flashlight.position.copy(camera.position);
     var dir=tmpDir.set(0,0,-1).applyQuaternion(camera.quaternion);
     flTarget.position.copy(camera.position).add(dir.multiplyScalar(10));
@@ -894,9 +909,11 @@ function tick(){
       if(Math.random()<0.5)distantScream();else knocks();
       sanity=Math.max(0,sanity-3);
     }
-    /* lights misbehave during hunts */
-    if(ent.mode==='hunt'&&fl)flashlight.intensity=Math.random()>0.3?1.6:0.4;
-    if(dEnt<1.55)die();
+    /* lights misbehave during hunts (same fixed-rate flicker clock) */
+    if(ent.mode==='hunt'&&fl)flashlight.intensity=huntFlickerOn?1.6:0.4;
+    /* grab test: re-measured AFTER the entity moved this frame (dEnt above is
+       pre-move) and sized to the two bodies — player 0.45 + entity 0.32 + reach */
+    if(Math.hypot(entity.position.x-pos.x,entity.position.z-pos.z)<1.25)die();
   }
   else{
     // don't leave ambient horror audio stuck at an elevated fear-driven volume

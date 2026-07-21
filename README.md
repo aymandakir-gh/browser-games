@@ -12,6 +12,9 @@ First-person horror in a procedurally generated maze.
 - Sprint drains stamina, and emptying it leaves you **out of breath** (audible gasp) — locked to a walk until it recovers past a third. Don't burn it all before a hunt starts
 - Sanity system: drains in darkness and near the entity; low sanity = more frequent hunts, whispers, unsteady camera. Recovers slowly in a safe zone (flashlight on, entity far, no active hunt) — rewards careful play, but costs battery so it's never a free reset. The bar tints green while recovering.
 - Procedural audio: drone, heartbeat by proximity, growls, breathing radar, distant screams, knocking, jumpscare. Growls, the entity's footsteps and the breathing radar are stereo-panned to its bearing — you can hear which side it's on
+- The flashlight's proximity and hunt flicker run on a fixed ~14Hz clock, so the strobe looks the same on a 60Hz and a 144Hz display
+
+> **Difficulty note:** the entity can now actually catch you. Proximity was measured in 3D against a camera sitting 1.65m above an entity standing on the floor, so the grab distance could never fall below 1.65 — while the kill threshold was 1.55. The game was unloseable. Distances are now measured on the floor plane and the grab is re-tested after the entity moves.
 
 Controls: WASD · SHIFT sprint · F flashlight · mouse look · ESC pause
 
@@ -26,6 +29,7 @@ Wave-based arena FPS.
 - Escalating waves, score, screen shake, damage feedback, synthesized audio
 - Low-integrity warning: a pulsing red vignette and a slow thump kick in below 35% HP so you feel the danger without checking the bar
 - Between waves a live countdown shows when the next wave drops; enemy shots flash a muzzle spark at the firing frame so you can read where fire is coming from
+- Melee contact now refreshes the integrity bar and plays a throttled hurt cue — previously the bar sat frozen and the damage was silent, so being clawed down read as a bug
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
 
