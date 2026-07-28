@@ -31,6 +31,8 @@ canvas{display:block}
 #sanity-wrap{position:fixed;top:78px;left:24px;width:120px;height:4px;border:1px solid #4a3a5a}
 #sanity{height:100%;width:100%;background:#7a5a9a;transition:width .3s linear}
 #sanity-lbl{position:fixed;top:86px;left:24px;font-size:9px;letter-spacing:2px;color:#5a4a6a}
+#crouch{position:fixed;top:100px;left:24px;font-size:9px;letter-spacing:2px;color:#6a8a7a;opacity:0;transition:opacity .12s}
+#crouch.on{opacity:1}
 #hint{position:fixed;bottom:36px;width:100%;text-align:center;font-size:12px;letter-spacing:2px;color:#8a8273;
   transition:opacity .5s}
 #vignette{position:fixed;inset:0;z-index:5;pointer-events:none;
@@ -56,13 +58,15 @@ canvas{display:block}
   <div id="stamina-wrap"><div id="stamina"></div></div>
   <div id="sanity-wrap"><div id="sanity"></div></div>
   <div id="sanity-lbl">SANITY</div>
-  <div id="hint">WASD MOVE &nbsp;&middot;&nbsp; SHIFT SPRINT &nbsp;&middot;&nbsp; F FLASHLIGHT &nbsp;&middot;&nbsp; FIND THE PAGES</div>
+  <div id="crouch">CROUCHED</div>
+  <div id="hint">WASD MOVE &nbsp;&middot;&nbsp; SHIFT SPRINT &nbsp;&middot;&nbsp; C CROUCH &nbsp;&middot;&nbsp; F FLASHLIGHT &nbsp;&middot;&nbsp; FIND THE PAGES</div>
 </div>
 
 <div class="screen" id="title">
   <h1>HOLLOW SIGNAL</h1>
   <p>Five pages are scattered through the maintenance tunnels. Something else is down here with you, and it listens for light and footsteps.<br><br>
   Your sanity drains in the dark &mdash; and the lower it falls, the more often it hunts. When the hunt begins, sprint away (you are faster) or kill your light, stand still, and pray.<br><br>
+  Hold C to crouch: barely a crawl, but it halves the distance at which it can pick you out.<br><br>
   Collect all five. Find the green door. Do not let it touch you.</p>
   <button class="btn" id="start">DESCEND</button>
   <p style="font-size:11px">headphones recommended &middot; click to lock mouse &middot; ESC to pause</p>
@@ -97,6 +101,9 @@ canvas{display:block}
 var GRID=13, CELL=4, WALL_H=3.4, WALL_T=0.3;
 var PLAYER_R=0.45, EYE=1.65;
 var WALK=3.4, SPRINT=5.6;
+/* crouching: slow and near-silent, and it cuts how far the entity can spot you.
+   the trade is time — the hunt clock keeps running while you crawl. */
+var CROUCH_EYE=1.0, CROUCH=1.5, CROUCH_SIGHT=0.45;
 var PAGES_NEEDED=5;
 
 /* ================= STATE ================= */
@@ -107,6 +114,9 @@ var pos=new THREE.Vector3(), vel=new THREE.Vector3();
 var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
     tmpDir=new THREE.Vector3(), tmpEnt=new THREE.Vector3();
 var battery=100, flashOn=true, stamina=100, exhausted=false;
+/* eyeH is the *camera* height and eases toward the crouch/stand target.
+   pos.y stays at EYE — it is the body reference every pickup radius is tuned to. */
+var crouching=false, eyeH=EYE;
 var pages=0, startTime=0;
 var maze, wallBoxes=[], pageMeshes=[], batteryMeshes=[], exitMesh=null, exitOpen=false;
 var pageTex=null; // shared canvas texture for all page meshes in the current build
@@ -615,6 +625,7 @@ function hint(msg){
 function reset(){
   buildMaze();buildCollectibles();
   pages=0;battery=100;flashOn=true;stamina=100;exhausted=false;
+  crouching=false;eyeH=EYE;$('crouch').classList.remove('on');
   $('pages').textContent='PAGES 0 / '+PAGES_NEEDED;
   pos.set(cellCenter(0,0).x,EYE,cellCenter(0,0).z);
   yaw=Math.PI/4;pitch=0;vel.set(0,0,0);
@@ -703,8 +714,11 @@ function tick(){
     /* --- movement --- */
     /* sprint is gated by an exhaustion state: burn stamina to empty and you
        must recover past a threshold before you can run again (no tap-spam) */
-    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&!exhausted&&stamina>2;
-    var speed=sprinting?SPRINT:WALK;
+    /* C is the advertised crouch key, not Ctrl: Ctrl+W is "close tab" in every
+       major browser and holding Ctrl to sneak forward would end the run. */
+    crouching=!!(keys.KeyC||keys.ControlLeft||keys.ControlRight);
+    var sprinting=(keys.ShiftLeft||keys.ShiftRight)&&!exhausted&&stamina>2&&!crouching;
+    var speed=crouching?CROUCH:(sprinting?SPRINT:WALK);
     var f=tmpF.set(-Math.sin(yaw),0,-Math.cos(yaw));
     var r=tmpR.set(-f.z,0,f.x);
     var wish=tmpWish.set(0,0,0);
@@ -725,10 +739,13 @@ function tick(){
     var stEl=$('stamina');
     stEl.style.width=stamina+'%';
     stEl.style.background=exhausted?'#a31616':'#4a463d';
+    $('crouch').classList.toggle('on',crouching);
     // head bob + footsteps
     var speedNow=Math.sqrt(vel.x*vel.x+vel.z*vel.z);
     var bob=Math.sin(t*(sprinting?13:9))*0.035*Math.min(1,speedNow/WALK);
-    camera.position.set(pos.x,EYE+bob,pos.z);
+    // ease the camera between standing and crouched instead of snapping
+    eyeH+=((crouching?CROUCH_EYE:EYE)-eyeH)*Math.min(1,dt*9);
+    camera.position.set(pos.x,eyeH+bob,pos.z);
     camera.rotation.set(0,0,0);
     // low sanity = unsteady hands
     var wob=(100-sanity)*0.00015*Math.sin(t*6.3);
@@ -736,7 +753,8 @@ function tick(){
     stepT-=dt*speedNow;
     if(stepT<=0&&speedNow>0.5){
       stepT=1.6;
-      blip(60+Math.random()*20,0.07,'triangle',0.12);
+      // crouched steps are a faint scuff, not a footfall
+      blip(60+Math.random()*20,0.07,'triangle',crouching?0.035:0.12);
     }
 
     /* --- flashlight --- */
@@ -799,7 +817,12 @@ function tick(){
     /* --- entity AI: phasmo-style hunt cycles --- */
     var pCell=worldToCell(pos),eCell=worldToCell(entity.position);
     ent.cell=eCell;
-    var seen=hasLOS(eCell,pCell)&&(dEnt<(fl?15:5));
+    /* spot range: your flashlight is the loudest thing about you (15m lit vs 5m
+       dark). crouching drops your silhouette below the pipework and cuts that
+       range to 6.8m lit / 2.3m dark — so light + crouch is roughly as survivable
+       as standing in the dark, and crouching in the dark is the safest state. */
+    var sightR=(fl?15:5)*(crouching?CROUCH_SIGHT:1);
+    var seen=hasLOS(eCell,pCell)&&(dEnt<sightR);
     var heard=sprinting&&moving&&dEnt<11;
     if(ent.mode==='hunt'&&(seen||heard))ent.lastKnown=[pCell[0],pCell[1]];
     if(ent.mode!=='hunt'){

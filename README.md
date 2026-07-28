@@ -10,13 +10,16 @@ First-person horror in a procedurally generated maze.
 - Flashlight with battery drain + battery pickups; light helps you see but lets the entity see you from 3x farther
 - Phasmophobia-inspired hunt cycles: the entity roams, then periodically hunts. It tracks your **last known position** — sprint away (it's slower than you) or go dark, stand still and let it lose you
 - Sprint drains stamina, and emptying it leaves you **out of breath** (audible gasp) — locked to a walk until it recovers past a third. Don't burn it all before a hunt starts
+- **Crouch (hold C)** to sneak: barely a crawl and you can't sprint from it, but it cuts the entity's spotting range to 45% (6.8m lit / 2.3m dark instead of 15m / 5m) and softens your footsteps to a scuff. Crouching in the dark is the quietest you can be — the cost is that the hunt clock keeps running while you crawl
 - Sanity system: drains in darkness and near the entity; low sanity = more frequent hunts, whispers, unsteady camera. Recovers slowly in a safe zone (flashlight on, entity far, no active hunt) — rewards careful play, but costs battery so it's never a free reset. The bar tints green while recovering.
 - Procedural audio: drone, heartbeat by proximity, growls, breathing radar, distant screams, knocking, jumpscare. Growls, the entity's footsteps and the breathing radar are stereo-panned to its bearing — you can hear which side it's on
 - The flashlight's proximity and hunt flicker run on a fixed ~14Hz clock, so the strobe looks the same on a 60Hz and a 144Hz display
 
 > **Difficulty note:** the entity can now actually catch you. Proximity was measured in 3D against a camera sitting 1.65m above an entity standing on the floor, so the grab distance could never fall below 1.65 — while the kill threshold was 1.55. The game was unloseable. Distances are now measured on the floor plane and the grab is re-tested after the entity moves.
 
-Controls: WASD · SHIFT sprint · F flashlight · mouse look · ESC pause
+Controls: WASD · SHIFT sprint · **C crouch** · F flashlight · mouse look · ESC pause
+
+> Crouch is bound to **C**, not Ctrl: Ctrl+W closes the tab in every major browser, so holding Ctrl to sneak forward would end the run. Ctrl still works as an undocumented alias for anyone whose muscle memory demands it.
 
 ## CORDITE — `shooter.html`
 
@@ -30,6 +33,7 @@ Wave-based arena FPS.
 - Low-integrity warning: a pulsing red vignette and a slow thump kick in below 35% HP so you feel the danger without checking the bar
 - Between waves a live countdown shows when the next wave drops; enemy shots flash a muzzle spark at the firing frame so you can read where fire is coming from
 - Melee contact now refreshes the integrity bar and plays a throttled hurt cue — previously the bar sat frozen and the damage was silent, so being clawed down read as a bug
+- **Pooled effects:** sparks, debris and tracers are recycled from a free list instead of allocating a fresh geometry + material per particle and disposing them a second later. A single kill used to churn ~23 GPU buffer create/destroy pairs; after warm-up the effect system now allocates nothing per frame
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
 
@@ -41,7 +45,8 @@ Larger ideas deferred to keep each change incremental and reversible:
 
 - In-game settings menu (mouse sensitivity, master volume) shared by both games
 - Mobile / touch controls (virtual stick + look drag)
-- Object pooling for shooter particles, projectiles and tracers (currently per-spawn `new Mesh`)
+- Extend pooling to shooter projectiles and enemy meshes (particles and tracers are done; enemies still build a fresh 6-mesh group per spawn)
+- Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch gives stealth a first mechanic to build on
 
 ---
 

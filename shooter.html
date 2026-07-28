@@ -351,8 +351,10 @@ function reset(){
   enemies.forEach(function(e){scene.remove(e.group);disposeGroup(e.group);});
   projectiles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
   pickups.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
-  particles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
-  tracers.forEach(function(t){scene.remove(t.mesh);disposeMesh(t.mesh);});
+  // pooled effects go back on the free list — disposing them would tear down
+  // the shared unit geometry / cached materials the pool is built on
+  particles.forEach(function(p){releaseParticle(p.mesh);});
+  tracers.forEach(function(t){releaseTracer(t.mesh);});
   enemies=[];projectiles=[];pickups=[];particles=[];tracers=[];
   hp=100;ammo=MAG;reserve=120;reloading=false;
   wave=0;score=0;kills=0;inWave=false;betweenT=1.5;nextWaveSec=-1;
@@ -450,11 +452,10 @@ function killEnemy(e,headshot){
   // tumbling debris chunks
   for(var ci=0;ci<5;ci++){
     var cs=0.18+Math.random()*0.18;
-    var cm=new THREE.Mesh(new THREE.BoxGeometry(cs,cs,cs),
-      new THREE.MeshStandardMaterial({color:0x3a2020,roughness:0.7}));
+    var cm=acquireParticle(0x3a2020,true);
+    cm.scale.setScalar(cs);
     cm.position.copy(e.group.position).add(new THREE.Vector3(0,1+Math.random(),0));
-    scene.add(cm);
-    particles.push({mesh:cm,life:1.4,
+    particles.push({mesh:cm,size:cs,life:1.4,
       vel:new THREE.Vector3((Math.random()-0.5)*7,2+Math.random()*4,(Math.random()-0.5)*7),
       rv:new THREE.Vector3(Math.random()*8-4,Math.random()*8-4,Math.random()*8-4)});
   }
@@ -479,31 +480,76 @@ function hitmark(big){
 }
 
 /* ================= EFFECTS ================= */
-var sparkGeo=new THREE.BoxGeometry(0.06,0.06,0.06);sparkGeo._shared=true;
+/* Particles and tracers are POOLED. A single kill used to allocate ~23
+   BoxGeometries + 23 Materials and dispose them all a second later; a late wave
+   with several kills in flight churned hundreds of GPU buffer create/destroy
+   pairs per second. Now every effect mesh reuses one unit-cube geometry plus a
+   cached material, and retired meshes go back on a free list instead of being
+   disposed — so after warm-up the effect system allocates nothing per frame. */
+var unitBoxGeo=new THREE.BoxGeometry(1,1,1);unitBoxGeo._shared=true;
+var fxMats={};                 // "B|L"+colour hex -> shared material
+var particlePool=[],tracerPool=[];
+var POOL_CAP=512;              // hard ceiling so the free lists cannot grow forever
+function fxMat(color,lit){
+  var key=(lit?'L':'B')+color;
+  var m=fxMats[key];
+  if(!m){
+    m=lit?new THREE.MeshStandardMaterial({color:color,roughness:0.7})
+         :new THREE.MeshBasicMaterial({color:color});
+    fxMats[key]=m;
+  }
+  return m;
+}
+/* `lit` picks a shared MeshStandardMaterial (debris chunks catch the arena
+   lights) instead of the flat MeshBasicMaterial used for sparks and bursts */
+function acquireParticle(color,lit){
+  var m=particlePool.pop();
+  if(m){m.material=fxMat(color,lit);m.visible=true;}
+  else m=new THREE.Mesh(unitBoxGeo,fxMat(color,lit));
+  m.rotation.set(0,0,0);
+  scene.add(m);
+  return m;
+}
+function releaseParticle(m){
+  scene.remove(m);
+  if(particlePool.length<POOL_CAP)particlePool.push(m);
+}
+function acquireTracer(){
+  /* tracers animate their own opacity, so each pooled tracer keeps its own
+     material rather than sharing one out of fxMats */
+  var m=tracerPool.pop();
+  if(m){m.visible=true;m.material.opacity=0.7;}
+  else m=new THREE.Mesh(unitBoxGeo,new THREE.MeshBasicMaterial({color:0xffd080,transparent:true,opacity:0.7}));
+  scene.add(m);
+  return m;
+}
+function releaseTracer(m){
+  scene.remove(m);
+  if(tracerPool.length<128)tracerPool.push(m);
+}
 function sparks(p,n,color){
   for(var i=0;i<n;i++){
-    var m=new THREE.Mesh(sparkGeo,new THREE.MeshBasicMaterial({color:color}));
+    var m=acquireParticle(color);
     m.position.copy(p);
-    scene.add(m);
-    particles.push({mesh:m,vel:new THREE.Vector3((Math.random()-0.5)*6,Math.random()*5,(Math.random()-0.5)*6),life:0.5});
+    m.scale.setScalar(0.06);
+    particles.push({mesh:m,size:0.06,vel:new THREE.Vector3((Math.random()-0.5)*6,Math.random()*5,(Math.random()-0.5)*6),life:0.5});
   }
 }
 function burst(p,n,color){
   for(var i=0;i<n;i++){
     var s=0.1+Math.random()*0.15;
-    var m=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),new THREE.MeshBasicMaterial({color:Math.random()<0.4?0x1c1f28:color}));
+    var m=acquireParticle(Math.random()<0.4?0x1c1f28:color);
     m.position.copy(p);
-    scene.add(m);
-    particles.push({mesh:m,vel:new THREE.Vector3((Math.random()-0.5)*8,Math.random()*7,(Math.random()-0.5)*8),life:0.9});
+    m.scale.setScalar(s);
+    particles.push({mesh:m,size:s,vel:new THREE.Vector3((Math.random()-0.5)*8,Math.random()*7,(Math.random()-0.5)*8),life:0.9});
   }
 }
 function addTracer(from,to){
   var len=from.distanceTo(to);
-  var m=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.02,len),
-    new THREE.MeshBasicMaterial({color:0xffd080,transparent:true,opacity:0.7}));
+  var m=acquireTracer();
+  m.scale.set(0.02,0.02,len); // unit cube stretched along its local Z, which lookAt aims
   m.position.copy(from).lerp(to,0.5);
   m.lookAt(to);
-  scene.add(m);
   tracers.push({mesh:m,life:0.07});
 }
 function dropPickup(p,type){
@@ -766,14 +812,15 @@ function tick(){
       // floor bounce for debris
       if(pt.mesh.position.y<0.1&&pt.vel.y<0){pt.vel.y*=-0.4;pt.vel.x*=0.7;pt.vel.z*=0.7;}
     }
-    pt.mesh.scale.setScalar(Math.max(0.001,Math.min(1,pt.life)));
-    if(pt.life<=0){scene.remove(pt.mesh);disposeMesh(pt.mesh);particles.splice(k,1);}
+    // geometry is a unit cube now, so the fade multiplies the particle's own size
+    pt.mesh.scale.setScalar(pt.size*Math.max(0.001,Math.min(1,pt.life)));
+    if(pt.life<=0){releaseParticle(pt.mesh);particles.splice(k,1);}
   }
   for(var k2=tracers.length-1;k2>=0;k2--){
     var tr=tracers[k2];
     tr.life-=dt;
     tr.mesh.material.opacity=tr.life*10;
-    if(tr.life<=0){scene.remove(tr.mesh);disposeMesh(tr.mesh);tracers.splice(k2,1);}
+    if(tr.life<=0){releaseTracer(tr.mesh);tracers.splice(k2,1);}
   }
 
   renderer.render(scene,camera);
