@@ -10,6 +10,7 @@ First-person horror in a procedurally generated maze.
 - Flashlight with battery drain + battery pickups; light helps you see but lets the entity see you from 3x farther
 - Phasmophobia-inspired hunt cycles: the entity roams, then periodically hunts. It tracks your **last known position** — sprint away (it's slower than you) or go dark, stand still and let it lose you
 - Sprint drains stamina, and emptying it leaves you **out of breath** (audible gasp) — locked to a walk until it recovers past a third. Don't burn it all before a hunt starts
+- **Noise matters.** Your footsteps carry: sprinting is audible ~14m away, walking ~7m, crouching and standing still are silent. Noise inside that radius puts the entity into a new **investigate** state — it walks to where the sound came from (2.4 m/s, faster than roaming, well under a hunt) and looks around for ~7-11s before giving up. Investigating never grabs you; it just parks the thing near you until the next mistake starts a real hunt. This is what finally makes the crouch speed penalty worth paying when nothing is chasing you: crouching is the only way to move without leaving a trail
 - **Crouch (hold C)** to sneak: barely a crawl and you can't sprint from it, but it cuts the entity's spotting range to 45% (6.8m lit / 2.3m dark instead of 15m / 5m) and softens your footsteps to a scuff. Crouching in the dark is the quietest you can be — the cost is that the hunt clock keeps running while you crawl
 - Sanity system: drains in darkness and near the entity; low sanity = more frequent hunts, whispers, unsteady camera. Recovers slowly in a safe zone (flashlight on, entity far, no active hunt) — rewards careful play, but costs battery so it's never a free reset. The bar tints green while recovering.
 - Procedural audio: drone, heartbeat by proximity, growls, breathing radar, distant screams, knocking, jumpscare. Growls, the entity's footsteps and the breathing radar are stereo-panned to its bearing — you can hear which side it's on
@@ -33,6 +34,7 @@ Wave-based arena FPS.
 - Low-integrity warning: a pulsing red vignette and a slow thump kick in below 35% HP so you feel the danger without checking the bar
 - Between waves a live countdown shows when the next wave drops; enemy shots flash a muzzle spark at the firing frame so you can read where fire is coming from
 - Melee contact now refreshes the integrity bar and plays a throttled hurt cue — previously the bar sat frozen and the damage was silent, so being clawed down read as a bug
+- **Pooled enemies:** an enemy frame is a 6-mesh group whose geometry was already shared, but every spawn still built a fresh body material plus five `THREE.Mesh` wrappers and every kill disposed them — a 12-enemy wave churned ~72 objects. Rigs now return to a free list and are re-dressed on the next spawn (body materials stay with their rig, since each enemy flashes its own emissive on hit). Steady-state waves allocate no enemy meshes at all
 - **Pooled effects:** sparks, debris and tracers are recycled from a free list instead of allocating a fresh geometry + material per particle and disposing them a second later. A single kill used to churn ~23 GPU buffer create/destroy pairs; after warm-up the effect system now allocates nothing per frame
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
@@ -45,8 +47,9 @@ Larger ideas deferred to keep each change incremental and reversible:
 
 - In-game settings menu (mouse sensitivity, master volume) shared by both games
 - Mobile / touch controls (virtual stick + look drag)
-- Extend pooling to shooter projectiles and enemy meshes (particles and tracers are done; enemies still build a fresh 6-mesh group per spawn)
-- Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch gives stealth a first mechanic to build on
+- Extend pooling to shooter projectiles and pickups (particles, tracers and enemy rigs are done)
+- Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch and the noise model give stealth two mechanics to build on
+- Distraction throwable in the horror maze — the investigate state already reacts to a noise at a cell, so a thrown object would only need to feed it a different cell than yours
 
 ---
 

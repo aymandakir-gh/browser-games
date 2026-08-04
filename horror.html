@@ -327,8 +327,24 @@ var entity=new THREE.Group();
   var arm2=arms.clone();arm2.position.x=-0.42;arm2.rotation.z=-0.25;entity.add(arm2);
 })();
 scene.add(entity);
+/* mode: roam | investigate | hunt.
+   'investigate' is the middle gear — it heard something, walks to the noise,
+   and gives up if nothing else happens. It never grabs you; it just gets close
+   enough that the next mistake starts a real hunt. */
 var ent={mode:'roam',cell:[GRID-1,0],target:null,path:[],speed:1.6,repathT:0,searchT:0,
-  lastKnown:[0,0],huntT:0,calmT:16};
+  lastKnown:[0,0],huntT:0,calmT:16,investT:0,noiseCd:0};
+function investigate(cell){
+  if(ent.mode==='hunt')return;
+  var fresh=ent.mode!=='investigate';
+  ent.mode='investigate';
+  ent.investT=7+Math.random()*4;
+  ent.lastKnown=[cell[0],cell[1]];
+  ent.repathT=0;
+  if(fresh){
+    growl(0.3,entPan);
+    hint('SOMETHING HEARD YOU');
+  }
+}
 function startHunt(cell){
   if(ent.mode==='hunt')return;
   ent.mode='hunt';
@@ -631,7 +647,8 @@ function reset(){
   yaw=Math.PI/4;pitch=0;vel.set(0,0,0);
   placeEntityFar();
   sanity=100;whisperT=8;stingerT=24;
-  ent.calmT=16;ent.huntT=0;ent.lastKnown=[0,0];
+  ent.mode='roam';ent.path=[];ent.repathT=0;
+  ent.calmT=16;ent.huntT=0;ent.investT=0;ent.noiseCd=0;ent.lastKnown=[0,0];
   startTime=performance.now();
 }
 function begin(){
@@ -823,17 +840,31 @@ function tick(){
        as standing in the dark, and crouching in the dark is the safest state. */
     var sightR=(fl?15:5)*(crouching?CROUCH_SIGHT:1);
     var seen=hasLOS(eCell,pCell)&&(dEnt<sightR);
-    var heard=sprinting&&moving&&dEnt<11;
+    /* how far your footsteps carry. sprinting is a beacon, walking is audible
+       in the next couple of corridors, crouching is silent — which is what
+       finally makes the crouch speed penalty worth paying when you are not
+       being chased. Standing still is silent at any stance. */
+    var noiseR=!moving?0:(crouching?0:(sprinting?14:7));
+    var heard=moving&&dEnt<noiseR;
     if(ent.mode==='hunt'&&(seen||heard))ent.lastKnown=[pCell[0],pCell[1]];
+    ent.noiseCd-=dt;
     if(ent.mode!=='hunt'){
       if(seen)startHunt([pCell[0],pCell[1]]);
       else{
+        /* noise pulls it toward you without escalating straight to a hunt —
+           it walks to where the sound was and looks around */
+        if(heard&&ent.noiseCd<=0){ent.noiseCd=2.5;investigate(pCell);}
         ent.calmT-=dt;
         if(ent.calmT<=0){
           ent.calmT=14+Math.random()*14;
           // low sanity makes hunts more frequent
           if(Math.random()<0.25+(100-sanity)/180)startHunt([pCell[0],pCell[1]]);
         }
+      }
+      if(ent.mode==='investigate'){
+        ent.investT-=dt;
+        // it gave up: back to aimless roaming
+        if(ent.investT<=0){ent.mode='roam';ent.path=[];ent.repathT=0;}
       }
     }else{
       ent.huntT-=dt;
@@ -848,6 +879,16 @@ function tick(){
         if(!ent.path.length&&!seen&&!heard){
           var nb2=openNeighbors(eCell[0],eCell[1]);
           ent.path=[nb2[Math.floor(Math.random()*nb2.length)]];
+        }
+      }
+    }else if(ent.mode==='investigate'){
+      // walks to the noise; repaths lazily so you can slip away behind it
+      if(ent.repathT<=0){
+        ent.path=bfsPath(eCell,ent.lastKnown);
+        ent.repathT=1;
+        if(!ent.path.length){
+          var nb3=openNeighbors(eCell[0],eCell[1]);
+          ent.path=[nb3[Math.floor(Math.random()*nb3.length)]];
         }
       }
     }else{
@@ -876,7 +917,9 @@ function tick(){
       var edist=ed.length();
       if(edist<0.3)ent.path.shift();
       else{
-        ed.normalize().multiplyScalar((ent.mode==='hunt'?huntSpd:1.7)*dt);
+        // investigating is a purposeful walk — faster than roaming, well under a hunt
+        var moveSpd=ent.mode==='hunt'?huntSpd:(ent.mode==='investigate'?2.4:1.7);
+        ed.normalize().multiplyScalar(moveSpd*dt);
         entity.position.add(ed);
         entity.rotation.y=Math.atan2(ed.x,ed.z);
         entMoved=true;

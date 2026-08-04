@@ -214,13 +214,18 @@ gun.position.set(0.28,-0.25,-0.55);
 scene.add(camera);
 
 /* Free GPU resources for a transient mesh. scene.remove() alone leaks the
-   geometry/material/texture buffers. Shared geometries are flagged ._shared
-   so they are never disposed while other live meshes still reference them. */
+   geometry/material/texture buffers. Shared geometries AND materials are
+   flagged ._shared so they are never disposed while other live meshes still
+   reference them. */
 function disposeMesh(m){
   if(!m)return;
   if(m.geometry&&!m.geometry._shared)m.geometry.dispose();
   var mat=m.material;
-  if(mat)(Array.isArray(mat)?mat:[mat]).forEach(function(x){if(x.map)x.map.dispose();x.dispose();});
+  if(mat)(Array.isArray(mat)?mat:[mat]).forEach(function(x){
+    if(x._shared)return;
+    if(x.map)x.map.dispose();
+    x.dispose();
+  });
 }
 function disposeGroup(g){
   if(!g)return;
@@ -230,16 +235,47 @@ function disposeGroup(g){
 /* ================= ENEMIES ================= */
 var enemyBodyGeo=new THREE.CylinderGeometry(0.42,0.5,1.5,8);enemyBodyGeo._shared=true;
 var enemyHeadGeo=new THREE.SphereGeometry(0.3,10,8);enemyHeadGeo._shared=true;
-function spawnEnemy(level){
+var enemyEyeGeo=new THREE.BoxGeometry(0.34,0.06,0.06);enemyEyeGeo._shared=true;
+var enemyArmGeo=new THREE.CylinderGeometry(0.07,0.06,0.9,6);enemyArmGeo._shared=true;
+var enemyEyeMat=new THREE.MeshBasicMaterial({color:0xff3020});enemyEyeMat._shared=true;
+
+/* Enemy rigs are pooled. A frame is a 6-mesh group whose geometry is already
+   shared, but every spawn still built a fresh body material + 5 THREE.Mesh
+   wrappers and every kill disposed them — a 12-enemy wave churned ~72 objects.
+   Rigs now go back on a free list and are re-dressed on the next spawn. The
+   body material stays with its rig (each enemy flashes its own emissive on
+   hit, so it can't be shared across live enemies). */
+var enemyPool=[];
+function buildEnemyRig(){
   var mat=new THREE.MeshStandardMaterial({color:0x3a2020,roughness:0.7,metalness:0.3,emissive:0x000000});
   var g=new THREE.Group();
   var body=new THREE.Mesh(enemyBodyGeo,mat);body.position.y=1.05;g.add(body);
   var head=new THREE.Mesh(enemyHeadGeo,mat);head.position.y=2.05;g.add(head);
-  var eye=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.06,0.06),new THREE.MeshBasicMaterial({color:0xff3020}));
-  eye.position.set(0,2.08,0.24);g.add(eye);
-  var armGeo=new THREE.CylinderGeometry(0.07,0.06,0.9,6);
-  var la=new THREE.Mesh(armGeo,mat);la.position.set(-0.55,1.45,0);g.add(la);
-  var ra=new THREE.Mesh(armGeo,mat);ra.position.set(0.55,1.45,0);g.add(ra);
+  var eye=new THREE.Mesh(enemyEyeGeo,enemyEyeMat);eye.position.set(0,2.08,0.24);g.add(eye);
+  var la=new THREE.Mesh(enemyArmGeo,mat);la.position.set(-0.55,1.45,0);g.add(la);
+  var ra=new THREE.Mesh(enemyArmGeo,mat);ra.position.set(0.55,1.45,0);g.add(ra);
+  return {group:g,body:body,head:head,mat:mat,la:la,ra:ra};
+}
+function acquireEnemyRig(){
+  var r=enemyPool.pop()||buildEnemyRig();
+  // scrub any state a previous life left behind
+  r.mat.emissive.setHex(0x000000);
+  r.group.rotation.set(0,0,0);
+  r.la.rotation.set(0,0,0);r.ra.rotation.set(0,0,0);
+  r.la.position.set(-0.55,1.45,0);r.ra.position.set(0.55,1.45,0);
+  r.group.visible=true;
+  return r;
+}
+function releaseEnemyRig(e){
+  scene.remove(e.group);
+  // drop the back-references so a pooled rig can't keep a dead enemy alive
+  e.body.userData.enemy=null;e.head.userData.enemy=null;
+  if(enemyPool.length<32)enemyPool.push({group:e.group,body:e.body,head:e.head,mat:e.mat,la:e.la,ra:e.ra});
+  else disposeGroup(e.group);
+}
+function spawnEnemy(level){
+  var rig=acquireEnemyRig();
+  var g=rig.group,body=rig.body,head=rig.head,mat=rig.mat,la=rig.la,ra=rig.ra;
   // spawn at edge, away from player
   var ang,sx,sz;
   do{
@@ -348,7 +384,7 @@ function updateHud(){
 
 /* ================= GAME FLOW ================= */
 function reset(){
-  enemies.forEach(function(e){scene.remove(e.group);disposeGroup(e.group);});
+  enemies.forEach(function(e){releaseEnemyRig(e);});
   projectiles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
   pickups.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
   // pooled effects go back on the free list — disposing them would tear down
@@ -442,8 +478,10 @@ function fire(){
 }
 function killEnemy(e,headshot){
   e.alive=false;
-  scene.remove(e.group);
-  disposeGroup(e.group);
+  /* the rig goes back on the free list instead of being disposed — but the
+     debris/drop code below still reads e.group.position, so release only
+     detaches from the scene and leaves the transform intact */
+  releaseEnemyRig(e);
   enemies.splice(enemies.indexOf(e),1);
   kills++;
   score+=headshot?150:100;
