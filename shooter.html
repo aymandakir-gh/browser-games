@@ -385,8 +385,8 @@ function updateHud(){
 /* ================= GAME FLOW ================= */
 function reset(){
   enemies.forEach(function(e){releaseEnemyRig(e);});
-  projectiles.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
-  pickups.forEach(function(p){scene.remove(p.mesh);disposeMesh(p.mesh);});
+  projectiles.forEach(function(p){releaseProjectile(p.mesh);});
+  pickups.forEach(function(p){releasePickup(p.mesh);});
   // pooled effects go back on the free list — disposing them would tear down
   // the shared unit geometry / cached materials the pool is built on
   particles.forEach(function(p){releaseParticle(p.mesh);});
@@ -565,6 +565,47 @@ function releaseTracer(m){
   scene.remove(m);
   if(tracerPool.length<128)tracerPool.push(m);
 }
+/* Enemy projectiles and drop pickups were the last unpooled spawns in the
+   effect system — each enemy shot built a fresh SphereGeometry + Material and
+   every pickup drop built a fresh BoxGeometry + Material, both disposed a few
+   seconds later. A late wave with several enemies shooting on cooldown now
+   allocates zero geometries/materials for either. */
+var projGeo=new THREE.SphereGeometry(0.09,8,6);projGeo._shared=true;
+var projMat=new THREE.MeshBasicMaterial({color:0xff5030});projMat._shared=true;
+var projectilePool=[];
+function acquireProjectile(){
+  var m=projectilePool.pop();
+  if(m)m.visible=true;else m=new THREE.Mesh(projGeo,projMat);
+  scene.add(m);
+  return m;
+}
+function releaseProjectile(m){
+  scene.remove(m);
+  if(projectilePool.length<64)projectilePool.push(m);
+}
+var pickupGeo=new THREE.BoxGeometry(0.4,0.4,0.4);pickupGeo._shared=true;
+var pickupMats={}; // "hp"/"ammo" -> shared emissive material
+function pickupMat(type){
+  var m=pickupMats[type];
+  if(!m){
+    var color=type==='hp'?0x2fae3a:0xffb340;
+    m=new THREE.MeshStandardMaterial({color:color,emissive:color,emissiveIntensity:0.7});
+    pickupMats[type]=m;
+  }
+  return m;
+}
+var pickupPool=[];
+function acquirePickup(type){
+  var m=pickupPool.pop();
+  if(m){m.material=pickupMat(type);m.visible=true;}
+  else m=new THREE.Mesh(pickupGeo,pickupMat(type));
+  scene.add(m);
+  return m;
+}
+function releasePickup(m){
+  scene.remove(m);
+  if(pickupPool.length<32)pickupPool.push(m);
+}
 function sparks(p,n,color){
   for(var i=0;i<n;i++){
     var m=acquireParticle(color);
@@ -591,11 +632,8 @@ function addTracer(from,to){
   tracers.push({mesh:m,life:0.07});
 }
 function dropPickup(p,type){
-  var color=type==='hp'?0x2fae3a:0xffb340;
-  var m=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.4,0.4),
-    new THREE.MeshStandardMaterial({color:color,emissive:color,emissiveIntensity:0.7}));
+  var m=acquirePickup(type);
   m.position.set(p.x,0.6,p.z);
-  scene.add(m);
   pickups.push({mesh:m,type:type,life:20});
 }
 
@@ -767,10 +805,8 @@ function tick(){
         var aim=new THREE.Vector3(pos.x,pos.y-0.2,pos.z).sub(origin).normalize();
         // lead error
         aim.x+=(Math.random()-0.5)*0.06;aim.y+=(Math.random()-0.5)*0.04;aim.z+=(Math.random()-0.5)*0.06;
-        var pm=new THREE.Mesh(new THREE.SphereGeometry(0.09,8,6),
-          new THREE.MeshBasicMaterial({color:0xff5030}));
+        var pm=acquireProjectile();
         pm.position.copy(origin);
-        scene.add(pm);
         projectiles.push({mesh:pm,vel:aim.multiplyScalar(16),life:3});
         sparks(origin,5,0xffa030); // muzzle flash so you can read where shots come from
         sfxEnemyShot();
@@ -804,10 +840,10 @@ function tick(){
         hp-=12;sfxHurt();shake=Math.min(shake+0.3,0.5);
         $('dmg-vig').style.opacity=0.9;
         updateHud();
-        if(hp<=0){scene.remove(p.mesh);disposeMesh(p.mesh);projectiles.splice(i,1);die();continue;}
+        if(hp<=0){releaseProjectile(p.mesh);projectiles.splice(i,1);die();continue;}
       }
       if(hitPlayer||p.life<=0||pointBlocked(p.mesh.position)||p.mesh.position.y<0){
-        scene.remove(p.mesh);disposeMesh(p.mesh);projectiles.splice(i,1);
+        releaseProjectile(p.mesh);projectiles.splice(i,1);
       }
     }
     var dv=$('dmg-vig');
@@ -831,9 +867,9 @@ function tick(){
         if(pk.type==='hp')hp=Math.min(100,hp+30);
         else reserve=Math.min(240,reserve+45);
         sfxPickup();
-        scene.remove(pk.mesh);disposeMesh(pk.mesh);pickups.splice(j,1);
+        releasePickup(pk.mesh);pickups.splice(j,1);
         updateHud();
-      }else if(pk.life<=0){scene.remove(pk.mesh);disposeMesh(pk.mesh);pickups.splice(j,1);}
+      }else if(pk.life<=0){releasePickup(pk.mesh);pickups.splice(j,1);}
     }
   }
 

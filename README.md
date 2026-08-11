@@ -36,6 +36,7 @@ Wave-based arena FPS.
 - Melee contact now refreshes the integrity bar and plays a throttled hurt cue — previously the bar sat frozen and the damage was silent, so being clawed down read as a bug
 - **Pooled enemies:** an enemy frame is a 6-mesh group whose geometry was already shared, but every spawn still built a fresh body material plus five `THREE.Mesh` wrappers and every kill disposed them — a 12-enemy wave churned ~72 objects. Rigs now return to a free list and are re-dressed on the next spawn (body materials stay with their rig, since each enemy flashes its own emissive on hit). Steady-state waves allocate no enemy meshes at all
 - **Pooled effects:** sparks, debris and tracers are recycled from a free list instead of allocating a fresh geometry + material per particle and disposing them a second later. A single kill used to churn ~23 GPU buffer create/destroy pairs; after warm-up the effect system now allocates nothing per frame
+- **Pooled projectiles & pickups:** the last two unpooled spawns — enemy shots and health/ammo drops — now come from free lists with shared geometry and cached-by-type materials, same as the enemy rigs and particle effects above
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
 
@@ -47,7 +48,6 @@ Larger ideas deferred to keep each change incremental and reversible:
 
 - In-game settings menu (mouse sensitivity, master volume) shared by both games
 - Mobile / touch controls (virtual stick + look drag)
-- Extend pooling to shooter projectiles and pickups (particles, tracers and enemy rigs are done)
 - Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch and the noise model give stealth two mechanics to build on
 - Distraction throwable in the horror maze — the investigate state already reacts to a noise at a cell, so a thrown object would only need to feed it a different cell than yours
 

@@ -649,6 +649,10 @@ function reset(){
   sanity=100;whisperT=8;stingerT=24;
   ent.mode='roam';ent.path=[];ent.repathT=0;
   ent.calmT=16;ent.huntT=0;ent.investT=0;ent.noiseCd=0;ent.lastKnown=[0,0];
+  // audio/flicker timers carried leftover values from the previous life across
+  // a retry — e.g. growlT could already be deep negative after a long run, so
+  // a fresh descent could growl on frame 1 instead of after the intended lull
+  stepT=0;hbT=0;entStepT=0;growlT=3;flickerT=0;flickerOn=true;huntFlickerOn=true;
   startTime=performance.now();
 }
 function begin(){
