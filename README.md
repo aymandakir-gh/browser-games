@@ -15,10 +15,11 @@ First-person horror in a procedurally generated maze.
 - Sanity system: drains in darkness and near the entity; low sanity = more frequent hunts, whispers, unsteady camera. Recovers slowly in a safe zone (flashlight on, entity far, no active hunt) — rewards careful play, but costs battery so it's never a free reset. The bar tints green while recovering.
 - Procedural audio: drone, heartbeat by proximity, growls, breathing radar, distant screams, knocking, jumpscare. Growls, the entity's footsteps and the breathing radar are stereo-panned to its bearing — you can hear which side it's on
 - The flashlight's proximity and hunt flicker run on a fixed ~14Hz clock, so the strobe looks the same on a 60Hz and a 144Hz display
+- **Distraction throwable:** three pebbles per run (G). A thrown pebble lands 2-4 cells down whichever cardinal corridor you're facing (stopping early at a wall) and, if the entity is close enough to hear it land, feeds that cell into the same `investigate()` gear your footsteps trigger — it goes to check the noise instead of you. Wasted if the entity's too far away to hear it, or already mid-hunt.
 
 > **Difficulty note:** the entity can now actually catch you. Proximity was measured in 3D against a camera sitting 1.65m above an entity standing on the floor, so the grab distance could never fall below 1.65 — while the kill threshold was 1.55. The game was unloseable. Distances are now measured on the floor plane and the grab is re-tested after the entity moves.
 
-Controls: WASD · SHIFT sprint · **C crouch** · F flashlight · mouse look · ESC pause
+Controls: WASD · SHIFT sprint · **C crouch** · F flashlight · **G throw pebble** · mouse look · ESC pause
 
 > Crouch is bound to **C**, not Ctrl: Ctrl+W closes the tab in every major browser, so holding Ctrl to sneak forward would end the run. Ctrl still works as an undocumented alias for anyone whose muscle memory demands it.
 
@@ -37,6 +38,7 @@ Wave-based arena FPS.
 - **Pooled enemies:** an enemy frame is a 6-mesh group whose geometry was already shared, but every spawn still built a fresh body material plus five `THREE.Mesh` wrappers and every kill disposed them — a 12-enemy wave churned ~72 objects. Rigs now return to a free list and are re-dressed on the next spawn (body materials stay with their rig, since each enemy flashes its own emissive on hit). Steady-state waves allocate no enemy meshes at all
 - **Pooled effects:** sparks, debris and tracers are recycled from a free list instead of allocating a fresh geometry + material per particle and disposing them a second later. A single kill used to churn ~23 GPU buffer create/destroy pairs; after warm-up the effect system now allocates nothing per frame
 - **Pooled projectiles & pickups:** the last two unpooled spawns — enemy shots and health/ammo drops — now come from free lists with shared geometry and cached-by-type materials, same as the enemy rigs and particle effects above
+- **Ammo feedback:** the ammo counter tints red at 5 rounds or fewer, and holding fire with an empty mag *and* empty reserve now plays a throttled dry-click instead of firing silently forever — `startReload()` no-ops once reserve is also empty, and that path never touched the fire-rate cooldown, so it used to retrigger every frame with no cue
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
 
@@ -48,8 +50,7 @@ Larger ideas deferred to keep each change incremental and reversible:
 
 - In-game settings menu (mouse sensitivity, master volume) shared by both games
 - Mobile / touch controls (virtual stick + look drag)
-- Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch and the noise model give stealth two mechanics to build on
-- Distraction throwable in the horror maze — the investigate state already reacts to a noise at a cell, so a thrown object would only need to feed it a different cell than yours
+- Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch, the noise model and the pebble throw give stealth three mechanics to build on
 
 ---
 

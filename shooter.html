@@ -26,6 +26,7 @@ canvas{display:block}
 #hp-num{position:fixed;bottom:48px;left:28px;font-size:13px;letter-spacing:2px}
 #ammo{position:fixed;bottom:28px;right:28px;font-size:30px;letter-spacing:3px;text-align:right}
 #ammo small{font-size:13px;color:#8a8a92}
+#ammo.low{color:#d22f2f}
 #reload-hint{position:fixed;bottom:70px;right:28px;font-size:12px;color:#ffb340;opacity:0}
 #wave-info{position:fixed;top:22px;left:28px;font-size:13px;letter-spacing:2px}
 #score{position:fixed;top:22px;right:28px;font-size:13px;letter-spacing:2px;text-align:right}
@@ -106,7 +107,7 @@ var pos=new THREE.Vector3(0,EYE,0), vel=new THREE.Vector3(), vy=0, grounded=true
 var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
 var wave=0, score=0, kills=0, betweenT=0, inWave=false;
 var enemies=[], projectiles=[], pickups=[], particles=[], tracers=[];
-var shake=0, recoil=0, lowHpT=0, meleeSfxT=0;
+var shake=0, recoil=0, lowHpT=0, meleeSfxT=0, emptyClickT=0;
 var nextWaveSec=-1; // last whole-second shown in the between-wave countdown
 /* reusable temp vectors — avoid per-frame allocations in movement + enemy AI */
 var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
@@ -335,6 +336,7 @@ function sfxHurt(){noiseBurst(0.2,500,0.45);tone(140,0.2,'sawtooth',0.2,70);}
 function sfxPickup(){tone(523,0.08,'sine',0.2);tone(784,0.16,'sine',0.18);}
 function sfxEnemyShot(){tone(300,0.12,'sawtooth',0.12,160);}
 function sfxWave(){tone(220,0.3,'sine',0.25);setTimeout(function(){tone(330,0.4,'sine',0.22);},180);}
+function sfxEmpty(){tone(200,0.03,'square',0.08);setTimeout(function(){tone(160,0.03,'square',0.08);},70);}
 
 /* ================= INPUT ================= */
 addEventListener('keydown',function(e){
@@ -377,6 +379,7 @@ function banner(msg,ms){
 function updateHud(){
   var h=$('hp');h.style.width=Math.max(0,hp)+'%';h.classList.toggle('low',hp<35);
   $('ammo').innerHTML=ammo+' <small>/ '+reserve+'</small>';
+  $('ammo').classList.toggle('low',ammo<=5&&!reloading);
   $('wave-info').textContent='WAVE '+wave+(inWave?' — '+enemies.length+' LEFT':'');
   $('score').textContent='SCORE '+score;
   $('reload-hint').style.opacity=(ammo===0&&!reloading)?1:0;
@@ -394,6 +397,7 @@ function reset(){
   enemies=[];projectiles=[];pickups=[];particles=[];tracers=[];
   hp=100;ammo=MAG;reserve=120;reloading=false;
   wave=0;score=0;kills=0;inWave=false;betweenT=1.5;nextWaveSec=-1;
+  meleeSfxT=0;emptyClickT=0;lowHpT=0;
   pos.set(0,EYE,0);vel.set(0,0,0);vy=0;yaw=0;pitch=0;
   aiming=false;camera.fov=75;camera.updateProjectionMatrix(); // clear any ADS zoom from a prior run
   updateHud();
@@ -431,7 +435,15 @@ function startReload(){
   reloading=true;reloadT=RELOAD_T;sfxReload();
 }
 function fire(){
-  if(reloading||ammo<=0){if(ammo<=0)startReload();return;}
+  if(reloading||ammo<=0){
+    if(ammo<=0){
+      startReload();
+      // startReload() no-ops once reserve is also empty, and fireT is never set on
+      // this path — so holding LMB with nothing left used to fire silently forever
+      if(reserve<=0&&emptyClickT<=0){emptyClickT=0.4;sfxEmpty();}
+    }
+    return;
+  }
   ammo--;fireT=FIRE_RATE;
   recoil=Math.min(recoil+0.025,0.09);
   shake=Math.min(shake+0.12,0.4);
@@ -739,6 +751,7 @@ function tick(){
 
     /* firing */
     fireT-=dt;
+    emptyClickT-=dt;
     if(mouseDown&&fireT<=0)fire();
     if(reloading){
       reloadT-=dt;

@@ -33,6 +33,7 @@ canvas{display:block}
 #sanity-lbl{position:fixed;top:86px;left:24px;font-size:9px;letter-spacing:2px;color:#5a4a6a}
 #crouch{position:fixed;top:100px;left:24px;font-size:9px;letter-spacing:2px;color:#6a8a7a;opacity:0;transition:opacity .12s}
 #crouch.on{opacity:1}
+#pebbles{position:fixed;top:114px;left:24px;font-size:9px;letter-spacing:2px;color:#8a8273}
 #hint{position:fixed;bottom:36px;width:100%;text-align:center;font-size:12px;letter-spacing:2px;color:#8a8273;
   transition:opacity .5s}
 #vignette{position:fixed;inset:0;z-index:5;pointer-events:none;
@@ -59,7 +60,8 @@ canvas{display:block}
   <div id="sanity-wrap"><div id="sanity"></div></div>
   <div id="sanity-lbl">SANITY</div>
   <div id="crouch">CROUCHED</div>
-  <div id="hint">WASD MOVE &nbsp;&middot;&nbsp; SHIFT SPRINT &nbsp;&middot;&nbsp; C CROUCH &nbsp;&middot;&nbsp; F FLASHLIGHT &nbsp;&middot;&nbsp; FIND THE PAGES</div>
+  <div id="pebbles">PEBBLES 3</div>
+  <div id="hint">WASD MOVE &nbsp;&middot;&nbsp; SHIFT SPRINT &nbsp;&middot;&nbsp; C CROUCH &nbsp;&middot;&nbsp; F FLASHLIGHT &nbsp;&middot;&nbsp; G THROW PEBBLE &nbsp;&middot;&nbsp; FIND THE PAGES</div>
 </div>
 
 <div class="screen" id="title">
@@ -67,6 +69,7 @@ canvas{display:block}
   <p>Five pages are scattered through the maintenance tunnels. Something else is down here with you, and it listens for light and footsteps.<br><br>
   Your sanity drains in the dark &mdash; and the lower it falls, the more often it hunts. When the hunt begins, sprint away (you are faster) or kill your light, stand still, and pray.<br><br>
   Hold C to crouch: barely a crawl, but it halves the distance at which it can pick you out.<br><br>
+  You're carrying three pebbles &mdash; press G to throw one down a corridor and pull it toward the noise instead of you.<br><br>
   Collect all five. Find the green door. Do not let it touch you.</p>
   <button class="btn" id="start">DESCEND</button>
   <p style="font-size:11px">headphones recommended &middot; click to lock mouse &middot; ESC to pause</p>
@@ -118,6 +121,7 @@ var battery=100, flashOn=true, stamina=100, exhausted=false;
    pos.y stays at EYE — it is the body reference every pickup radius is tuned to. */
 var crouching=false, eyeH=EYE;
 var pages=0, startTime=0;
+var pebbles=3; // distraction throwable, 3 per run — see throwPebble()
 var maze, wallBoxes=[], pageMeshes=[], batteryMeshes=[], exitMesh=null, exitOpen=false;
 var pageTex=null; // shared canvas texture for all page meshes in the current build
 
@@ -408,6 +412,37 @@ function hasLOS(a,b){
   }
   return true;
 }
+/* ================= THROWABLE (distraction) ================= */
+/* three pebbles per run. Thrown along the cardinal direction closest to your
+   facing, they land 2-4 cells down that corridor (stopping early at a wall)
+   and — if the entity is close enough to hear the landing — feed that cell
+   into the same investigate() gear footstep noise triggers, just placed
+   somewhere you aren't. */
+function primaryDir(){
+  var fx=-Math.sin(yaw),fz=-Math.cos(yaw);
+  if(Math.abs(fx)>Math.abs(fz))return fx>0?'e':'w';
+  return fz>0?'s':'n';
+}
+function throwPebble(){
+  if(pebbles<=0)return;
+  pebbles--;
+  $('pebbles').textContent='PEBBLES '+pebbles;
+  var dir=primaryDir(),cell=worldToCell(pos),cx=cell[0],cy=cell[1];
+  var steps=2+Math.floor(Math.random()*3);
+  for(var i=0;i<steps;i++){
+    var c=maze[cx][cy];
+    if(dir==='n'){if(c.n)break;cy--;}
+    else if(dir==='s'){if(c.s)break;cy++;}
+    else if(dir==='e'){if(c.e)break;cx++;}
+    else{if(c.w)break;cx--;}
+  }
+  clatter(0.3,entPan);
+  // heard from the landing cell, not from you — a throw across the map does nothing
+  var heardIt=entity.position.distanceTo(cellCenter(cx,cy))<20;
+  if(heardIt)investigate([cx,cy]);
+  hint(heardIt?'IT HEARD THE PEBBLE':'THE PEBBLE LANDS UNHEARD');
+}
+
 function placeEntityFar(){
   var pCell=worldToCell(pos);           // true player spawn cell, not assumed (0,0)
   var exit=[GRID-1,GRID-1];             // win door is at cellCenter(GRID-1,GRID-1)
@@ -548,6 +583,18 @@ function thud(vol,pan){
   g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+0.2);
   o.connect(g);panTo(g,pan);o.start();o.stop(AC.currentTime+0.22);
 }
+function clatter(vol,pan){
+  // short filtered noise burst — a thrown pebble skittering off concrete
+  if(!AC)return;
+  var dur=0.18;
+  var buf=AC.createBuffer(1,AC.sampleRate*dur,AC.sampleRate);
+  var d=buf.getChannelData(0);
+  for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+  var src=AC.createBufferSource();src.buffer=buf;
+  var bp=AC.createBiquadFilter();bp.type='bandpass';bp.frequency.value=2600;bp.Q.value=1.2;
+  var g=AC.createGain();g.gain.value=vol||0.3;
+  src.connect(bp);bp.connect(g);panTo(g,pan);src.start();
+}
 function whisper(){
   if(!AC)return;
   var dur=1.2;
@@ -613,6 +660,7 @@ var flickerT=0,flickerOn=true,huntFlickerOn=true;
 addEventListener('keydown',function(e){
   keys[e.code]=true;
   if(e.code==='KeyF'&&state==='play'){flashOn=!flashOn;blip(flashOn?880:440,0.06,'square',0.08);}
+  if(e.code==='KeyG'&&state==='play')throwPebble();
 });
 addEventListener('keyup',function(e){keys[e.code]=false;});
 addEventListener('mousemove',function(e){
@@ -642,6 +690,7 @@ function reset(){
   buildMaze();buildCollectibles();
   pages=0;battery=100;flashOn=true;stamina=100;exhausted=false;
   crouching=false;eyeH=EYE;$('crouch').classList.remove('on');
+  pebbles=3;$('pebbles').textContent='PEBBLES '+pebbles;
   $('pages').textContent='PAGES 0 / '+PAGES_NEEDED;
   pos.set(cellCenter(0,0).x,EYE,cellCenter(0,0).z);
   yaw=Math.PI/4;pitch=0;vel.set(0,0,0);
