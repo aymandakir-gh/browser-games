@@ -16,6 +16,9 @@ canvas{display:block}
 .screen .btn{border:1px solid #ffb340;background:transparent;color:#ffb340;padding:12px 34px;
   font-family:inherit;font-size:14px;letter-spacing:3px;cursor:pointer}
 .screen .btn:hover{background:#ffb340;color:#000}
+.opt-row{display:flex;align-items:center;justify-content:space-between;gap:14px;width:280px;font-size:11px;letter-spacing:1px;color:#8a8a92}
+.opt-row input[type=range]{flex:1;margin:0 10px;accent-color:#ffb340}
+.opt-row span{width:34px;text-align:right}
 #death h1{color:#d22f2f}
 /* HUD */
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;opacity:0;transition:opacity .3s}
@@ -81,6 +84,14 @@ canvas{display:block}
 <div class="screen hidden" id="pause">
   <h1 style="font-size:26px">PAUSED</h1>
   <button class="btn" id="resume">RESUME</button>
+  <button class="btn" id="opt-open" style="font-size:12px;padding:8px 24px">SETTINGS</button>
+</div>
+
+<div class="screen hidden" id="settings">
+  <h1 style="font-size:22px">SETTINGS</h1>
+  <div class="opt-row">MOUSE SENSITIVITY<input type="range" id="opt-sens" min="0.4" max="2" step="0.05" value="1"><span id="opt-sens-val">1.0</span></div>
+  <div class="opt-row">VOLUME<input type="range" id="opt-vol" min="0" max="1" step="0.05" value="1"><span id="opt-vol-val">100%</span></div>
+  <button class="btn" id="opt-back" style="font-size:12px;padding:8px 24px">BACK</button>
 </div>
 
 <div class="screen hidden" id="death">
@@ -102,6 +113,7 @@ var MAG=30, FIRE_RATE=0.105, DMG=34, HEAD_MULT=3, RELOAD_T=1.4;
 
 /* ================= STATE ================= */
 var state='title';
+var mouseSens=1,volMul=1; // settings: mouse sensitivity multiplier, master volume multiplier
 var keys={}, mouseDown=false, aiming=false, yaw=0, pitch=0;
 var pos=new THREE.Vector3(0,EYE,0), vel=new THREE.Vector3(), vy=0, grounded=true;
 var hp=100, ammo=MAG, reserve=120, reloading=false, reloadT=0, fireT=0;
@@ -356,7 +368,7 @@ addEventListener('mouseup',function(e){
 addEventListener('contextmenu',function(e){e.preventDefault();}); // suppress browser menu on RMB
 addEventListener('mousemove',function(e){
   if(document.pointerLockElement!==renderer.domElement)return;
-  var s=aiming?0.0013:0.0021; // steadier look while sighted
+  var s=(aiming?0.0013:0.0021)*mouseSens; // steadier look while sighted
   yaw-=e.movementX*s;
   pitch-=e.movementY*s;
   pitch=Math.max(-1.5,Math.min(1.5,pitch));
@@ -411,6 +423,10 @@ function begin(){
 $('start').addEventListener('click',function(){reset();begin();});
 $('resume').addEventListener('click',begin);
 $('retry').addEventListener('click',function(){reset();begin();});
+$('opt-open').addEventListener('click',function(){$('pause').classList.add('hidden');$('settings').classList.remove('hidden');});
+$('opt-back').addEventListener('click',function(){$('settings').classList.add('hidden');$('pause').classList.remove('hidden');});
+$('opt-sens').addEventListener('input',function(e){mouseSens=parseFloat(e.target.value);$('opt-sens-val').textContent=mouseSens.toFixed(2);});
+$('opt-vol').addEventListener('input',function(e){volMul=parseFloat(e.target.value);$('opt-vol-val').textContent=Math.round(volMul*100)+'%';if(master)master.gain.value=0.55*volMul;});
 
 function startWave(){
   wave++;inWave=true;nextWaveSec=-1;

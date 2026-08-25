@@ -16,6 +16,7 @@ First-person horror in a procedurally generated maze.
 - Procedural audio: drone, heartbeat by proximity, growls, breathing radar, distant screams, knocking, jumpscare. Growls, the entity's footsteps and the breathing radar are stereo-panned to its bearing — you can hear which side it's on
 - The flashlight's proximity and hunt flicker run on a fixed ~14Hz clock, so the strobe looks the same on a 60Hz and a 144Hz display
 - **Distraction throwable:** three pebbles per run (G). A thrown pebble lands 2-4 cells down whichever cardinal corridor you're facing (stopping early at a wall) and, if the entity is close enough to hear it land, feeds that cell into the same `investigate()` gear your footsteps trigger — it goes to check the noise instead of you. Wasted if the entity's too far away to hear it, or already mid-hunt.
+- **Settings menu** (pause → SETTINGS): mouse sensitivity (0.4x-2x) and master volume sliders. Plain in-memory state, resets on reload by design — same as the rest of the game's state
 
 > **Difficulty note:** the entity can now actually catch you. Proximity was measured in 3D against a camera sitting 1.65m above an entity standing on the floor, so the grab distance could never fall below 1.65 — while the kill threshold was 1.55. The game was unloseable. Distances are now measured on the floor plane and the grab is re-tested after the entity moves.
 
@@ -39,6 +40,7 @@ Wave-based arena FPS.
 - **Pooled effects:** sparks, debris and tracers are recycled from a free list instead of allocating a fresh geometry + material per particle and disposing them a second later. A single kill used to churn ~23 GPU buffer create/destroy pairs; after warm-up the effect system now allocates nothing per frame
 - **Pooled projectiles & pickups:** the last two unpooled spawns — enemy shots and health/ammo drops — now come from free lists with shared geometry and cached-by-type materials, same as the enemy rigs and particle effects above
 - **Ammo feedback:** the ammo counter tints red at 5 rounds or fewer, and holding fire with an empty mag *and* empty reserve now plays a throttled dry-click instead of firing silently forever — `startReload()` no-ops once reserve is also empty, and that path never touched the fire-rate cooldown, so it used to retrigger every frame with no cue
+- **Settings menu** (pause → SETTINGS): mouse sensitivity (0.4x-2x, also scales the aim-down-sights multiplier) and master volume sliders
 
 Controls: WASD · mouse aim · hold LMB fire · RMB aim down sights · R reload · SHIFT sprint · SPACE jump
 
@@ -48,7 +50,6 @@ Sprint works with either Shift key in both games.
 
 Larger ideas deferred to keep each change incremental and reversible:
 
-- In-game settings menu (mouse sensitivity, master volume) shared by both games
 - Mobile / touch controls (virtual stick + look drag)
 - Hiding spots in the horror maze (lockers / alcoves that break line of sight entirely), now that crouch, the noise model and the pebble throw give stealth three mechanics to build on
 

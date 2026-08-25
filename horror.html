@@ -17,6 +17,9 @@ canvas{display:block}
 .screen .btn{border:1px solid #cfc8b8;background:transparent;color:#cfc8b8;padding:12px 32px;
   font-family:inherit;font-size:14px;letter-spacing:3px;cursor:pointer}
 .screen .btn:hover{background:#cfc8b8;color:#000}
+.opt-row{display:flex;align-items:center;justify-content:space-between;gap:14px;width:280px;font-size:11px;letter-spacing:1px;color:#8a8273}
+.opt-row input[type=range]{flex:1;margin:0 10px;accent-color:#cfc8b8}
+.opt-row span{width:34px;text-align:right}
 #death h1{color:#a31616}
 #win h1{color:#6a8a4f}
 /* HUD */
@@ -78,6 +81,14 @@ canvas{display:block}
 <div class="screen hidden" id="pause">
   <h1 style="font-size:24px">PAUSED</h1>
   <button class="btn" id="resume">RESUME</button>
+  <button class="btn" id="opt-open" style="font-size:12px;padding:8px 24px">SETTINGS</button>
+</div>
+
+<div class="screen hidden" id="settings">
+  <h1 style="font-size:20px">SETTINGS</h1>
+  <div class="opt-row">MOUSE SENSITIVITY<input type="range" id="opt-sens" min="0.4" max="2" step="0.05" value="1"><span id="opt-sens-val">1.0</span></div>
+  <div class="opt-row">VOLUME<input type="range" id="opt-vol" min="0" max="1" step="0.05" value="1"><span id="opt-vol-val">100%</span></div>
+  <button class="btn" id="opt-back" style="font-size:12px;padding:8px 24px">BACK</button>
 </div>
 
 <div class="screen hidden" id="death">
@@ -111,6 +122,7 @@ var PAGES_NEEDED=5;
 
 /* ================= STATE ================= */
 var state='title'; // title|play|pause|dead|win
+var mouseSens=1,volMul=1; // settings: mouse sensitivity multiplier, master volume multiplier
 var keys={}, yaw=0, pitch=0;
 var pos=new THREE.Vector3(), vel=new THREE.Vector3();
 /* reusable temp vectors — avoid per-frame allocations in the main loop */
@@ -665,8 +677,8 @@ addEventListener('keydown',function(e){
 addEventListener('keyup',function(e){keys[e.code]=false;});
 addEventListener('mousemove',function(e){
   if(document.pointerLockElement!==renderer.domElement)return;
-  yaw-=e.movementX*0.0022;
-  pitch-=e.movementY*0.0022;
+  yaw-=e.movementX*0.0022*mouseSens;
+  pitch-=e.movementY*0.0022*mouseSens;
   pitch=Math.max(-1.45,Math.min(1.45,pitch));
 });
 document.addEventListener('pointerlockchange',function(){
@@ -714,6 +726,10 @@ $('start').addEventListener('click',function(){reset();begin();});
 $('resume').addEventListener('click',begin);
 $('retry').addEventListener('click',function(){reset();begin();});
 $('again').addEventListener('click',function(){reset();begin();});
+$('opt-open').addEventListener('click',function(){$('pause').classList.add('hidden');$('settings').classList.remove('hidden');});
+$('opt-back').addEventListener('click',function(){$('settings').classList.add('hidden');$('pause').classList.remove('hidden');});
+$('opt-sens').addEventListener('input',function(e){mouseSens=parseFloat(e.target.value);$('opt-sens-val').textContent=mouseSens.toFixed(2);});
+$('opt-vol').addEventListener('input',function(e){volMul=parseFloat(e.target.value);$('opt-vol-val').textContent=Math.round(volMul*100)+'%';if(master)master.gain.value=0.7*volMul;});
 
 function die(){
   state='dead';
