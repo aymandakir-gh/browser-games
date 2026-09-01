@@ -37,6 +37,7 @@ canvas{display:block}
 #crouch{position:fixed;top:100px;left:24px;font-size:9px;letter-spacing:2px;color:#6a8a7a;opacity:0;transition:opacity .12s}
 #crouch.on{opacity:1}
 #pebbles{position:fixed;top:114px;left:24px;font-size:9px;letter-spacing:2px;color:#8a8273}
+#pebbles.low{color:#a31616}
 #hint{position:fixed;bottom:36px;width:100%;text-align:center;font-size:12px;letter-spacing:2px;color:#8a8273;
   transition:opacity .5s}
 #vignette{position:fixed;inset:0;z-index:5;pointer-events:none;
@@ -128,7 +129,7 @@ var pos=new THREE.Vector3(), vel=new THREE.Vector3();
 /* reusable temp vectors — avoid per-frame allocations in the main loop */
 var tmpF=new THREE.Vector3(), tmpR=new THREE.Vector3(), tmpWish=new THREE.Vector3(),
     tmpDir=new THREE.Vector3(), tmpEnt=new THREE.Vector3();
-var battery=100, flashOn=true, stamina=100, exhausted=false;
+var battery=100, flashOn=true, stamina=100, exhausted=false, batteryWarned=false;
 /* eyeH is the *camera* height and eases toward the crouch/stand target.
    pos.y stays at EYE — it is the body reference every pickup radius is tuned to. */
 var crouching=false, eyeH=EYE;
@@ -439,6 +440,7 @@ function throwPebble(){
   if(pebbles<=0)return;
   pebbles--;
   $('pebbles').textContent='PEBBLES '+pebbles;
+  $('pebbles').classList.toggle('low',pebbles<=0);
   var dir=primaryDir(),cell=worldToCell(pos),cx=cell[0],cy=cell[1];
   var steps=2+Math.floor(Math.random()*3);
   for(var i=0;i<steps;i++){
@@ -700,9 +702,9 @@ function hint(msg){
 /* ================= GAME FLOW ================= */
 function reset(){
   buildMaze();buildCollectibles();
-  pages=0;battery=100;flashOn=true;stamina=100;exhausted=false;
+  pages=0;battery=100;flashOn=true;stamina=100;exhausted=false;batteryWarned=false;
   crouching=false;eyeH=EYE;$('crouch').classList.remove('on');
-  pebbles=3;$('pebbles').textContent='PEBBLES '+pebbles;
+  pebbles=3;$('pebbles').textContent='PEBBLES '+pebbles;$('pebbles').classList.remove('low');
   $('pages').textContent='PAGES 0 / '+PAGES_NEEDED;
   pos.set(cellCenter(0,0).x,EYE,cellCenter(0,0).z);
   yaw=Math.PI/4;pitch=0;vel.set(0,0,0);
@@ -872,6 +874,8 @@ function tick(){
     var bEl=$('battery');
     bEl.style.width=battery+'%';
     bEl.classList.toggle('low',battery<25);
+    if(battery<25&&!batteryWarned){batteryWarned=true;blip(220,0.18,'square',0.12);hint('BATTERY LOW');}
+    else if(battery>=25)batteryWarned=false;
 
     /* --- collectibles --- */
     for(var i=pageMeshes.length-1;i>=0;i--){

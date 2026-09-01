@@ -32,6 +32,7 @@ canvas{display:block}
 #ammo.low{color:#d22f2f}
 #reload-hint{position:fixed;bottom:70px;right:28px;font-size:12px;color:#ffb340;opacity:0}
 #wave-info{position:fixed;top:22px;left:28px;font-size:13px;letter-spacing:2px}
+#wave-info.soon{color:#ffb340}
 #score{position:fixed;top:22px;right:28px;font-size:13px;letter-spacing:2px;text-align:right}
 #banner{position:fixed;top:36%;width:100%;text-align:center;font-size:34px;letter-spacing:12px;
   color:#ffb340;opacity:0;transition:opacity .4s;text-shadow:0 0 24px rgba(255,179,64,.4)}
@@ -348,6 +349,7 @@ function sfxHurt(){noiseBurst(0.2,500,0.45);tone(140,0.2,'sawtooth',0.2,70);}
 function sfxPickup(){tone(523,0.08,'sine',0.2);tone(784,0.16,'sine',0.18);}
 function sfxEnemyShot(){tone(300,0.12,'sawtooth',0.12,160);}
 function sfxWave(){tone(220,0.3,'sine',0.25);setTimeout(function(){tone(330,0.4,'sine',0.22);},180);}
+function sfxWaveClear(){tone(440,0.12,'sine',0.22);setTimeout(function(){tone(660,0.16,'sine',0.2);},130);setTimeout(function(){tone(880,0.22,'sine',0.18);},260);}
 function sfxEmpty(){tone(200,0.03,'square',0.08);setTimeout(function(){tone(160,0.03,'square',0.08);},70);}
 
 /* ================= INPUT ================= */
@@ -430,6 +432,7 @@ $('opt-vol').addEventListener('input',function(e){volMul=parseFloat(e.target.val
 
 function startWave(){
   wave++;inWave=true;nextWaveSec=-1;
+  $('wave-info').classList.remove('soon');
   var n=3+wave*2;
   for(var i=0;i<n;i++)spawnEnemy(wave);
   banner('WAVE '+wave);
@@ -534,6 +537,7 @@ function killEnemy(e,headshot){
     inWave=false;betweenT=4;
     score+=wave*50;
     banner('WAVE '+wave+' CLEARED',2000);
+    sfxWaveClear();
   }
 }
 function hitmark(big){
@@ -785,7 +789,11 @@ function tick(){
       betweenT-=dt;
       // live countdown to the next wave (update the HUD only when the second changes)
       var sec=Math.max(0,Math.ceil(betweenT));
-      if(sec!==nextWaveSec){nextWaveSec=sec;$('wave-info').textContent='WAVE '+(wave+1)+' IN '+sec;}
+      if(sec!==nextWaveSec){
+        nextWaveSec=sec;
+        $('wave-info').textContent='WAVE '+(wave+1)+' IN '+sec;
+        $('wave-info').classList.toggle('soon',sec<=3);
+      }
       if(betweenT<=0)startWave();
     }
 
